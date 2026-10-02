@@ -8,14 +8,17 @@ export const AppContext = createContext();
 const AppContextProvider = (props) => {
 
     const navigate = useNavigate();
+
     const [userData, setUserData] = useState(null);
     const [chatData, setChatData] = useState(null);
+    const [selectedUser, setSelectedUser] = useState(null);
 
     const loadUserData = async (uid) => {
         try{
-            const userRef = doc(db,'users',uid)
+            const userRef = doc(db,'users',uid);
             const userSnap = await getDoc(userRef);
-            const userData = userSnap.data();
+            if(userSnap.exists()){
+                const userData = userSnap.data();
             setUserData(userData);
             if (userData.avatar && userData.name){
                 navigate('/chat');
@@ -27,21 +30,25 @@ const AppContextProvider = (props) => {
                 lastSeen: Date.now()
             })
             setInterval(async () => {
-                if(auth.chatUser){
+                if(auth.currentUser){
                   await updateDoc(userRef, {
                     lastSeen: Date.now()
                })
 
              }
             }, 60000);
+            }
+            
         } catch(error){
+            console.error("Error loading user data:", error);
 
         }
-    }
+    };
 
     const value = {
         userData,setUserData,
         chatData,setChatData,
+        selectedUser,setSelectedUser,
         loadUserData
     }
 

@@ -1,8 +1,38 @@
-import React from 'react'
+import React, { useContext, useEffect, useState } from 'react'
 import './LeftSidebar.css';
 import assets from '../../assets/assets';
+import { auth, db } from '../../config/firebase';
+import { collection, getDocs } from 'firebase/firestore';
+import { AppContext } from '../../context/AppContext';
 
 const LeftSidebar = () => {
+
+    const [users, setUsers] = useState([]);
+
+    const { setSelectedUser } = useContext(AppContext);
+
+    const fetchUsers = async () => {
+        try {
+            const userRef = collection(db, "users");
+
+            const snapshot = await getDocs(userRef);
+
+            const usersList = snapshot.docs.map((doc) => ({
+                ...doc.data(),
+                id: doc.id
+            }))
+            .filter((user) => user.id !== auth.currentUser.uid); // Exclude the current user
+
+            setUsers(usersList);
+        } catch (error) {
+            console.error("Error fetching users: ", error);
+        }
+    };
+
+    useEffect(()=>{
+        fetchUsers();
+    },[]);  
+
   return (
     <div className='ls'>
         <div className="ls-top">
@@ -23,12 +53,12 @@ const LeftSidebar = () => {
             </div>
         </div>
         <div className="ls-list">
-            {Array(12).fill("").map((item,index)=>(
-                <div key={index} className="friends">
-                <img src={assets.profile_img} alt="" />
+           {users.map((user)=>(
+                <div key={user.id} className="friends" onClick={()=> setSelectedUser(user)}>
+                <img src={user.avatar ||assets.profile_img} alt="" />
                 <div>
-                    <p>Richard Sanford</p>
-                    <span>Hello, How are you?</span>
+                    <p>{user.name || user.username}</p>
+                    <span>{user.bio}</span>
                 </div>
             </div>
             ))}
