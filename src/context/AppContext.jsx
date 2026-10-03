@@ -1,5 +1,5 @@
 import { doc, getDoc, updateDoc } from "firebase/firestore";
-import { createContext, useState } from "react";
+import { createContext, useEffect, useState } from "react";
 import { auth, db } from "../config/firebase";
 import { useNavigate } from "react-router-dom";
 
@@ -11,52 +11,98 @@ const AppContextProvider = (props) => {
 
     const [userData, setUserData] = useState(null);
     const [chatData, setChatData] = useState(null);
+
+    // Currently selected user
     const [selectedUser, setSelectedUser] = useState(null);
 
-    const loadUserData = async (uid) => {
-        try{
-            const userRef = doc(db,'users',uid);
-            const userSnap = await getDoc(userRef);
-            if(userSnap.exists()){
-                const userData = userSnap.data();
-            setUserData(userData);
-            if (userData.avatar && userData.name){
-                navigate('/chat');
-            }
-            else{
-                navigate('/profile')
-            }
-            await updateDoc(userRef, {
-                lastSeen: Date.now()
-            })
-            setInterval(async () => {
-                if(auth.currentUser){
-                  await updateDoc(userRef, {
-                    lastSeen: Date.now()
-               })
 
-             }
-            }, 60000);
+    // Get logged in user's data
+    const loadUserData = async (uid) => {
+
+        try {
+
+            const userRef = doc(db, "users", uid);
+            const userSnap = await getDoc(userRef);
+
+            if (userSnap.exists()) {
+
+                const data = userSnap.data();
+
+                setUserData(data);
+
+                // Go to chat if profile is complete
+                if (data.avatar && data.name) {
+                    navigate("/chat");
+                }
+                else {
+                    navigate("/profile");
+                }
+
+                // Update last seen
+                await updateDoc(userRef, {
+                    lastSeen: Date.now()
+                });
             }
-            
-        } catch(error){
+
+        } catch (error) {
+
             console.error("Error loading user data:", error);
 
         }
     };
 
+
+    // Update last seen every 1 minute
+    useEffect(() => {
+
+        if (!auth.currentUser) return;
+
+        const userRef = doc(db, "users", auth.currentUser.uid);
+
+        const interval = setInterval(async () => {
+
+            if (auth.currentUser) {
+
+                try {
+
+                    await updateDoc(userRef, {
+                        lastSeen: Date.now()
+                    });
+
+                } catch (error) {
+
+                    console.error("Error updating last seen:", error);
+
+                }
+            }
+
+        }, 60000);
+
+        // Clear interval when component unmounts
+        return () => clearInterval(interval);
+
+    }, [userData]);
+
+
     const value = {
-        userData,setUserData,
-        chatData,setChatData,
-        selectedUser,setSelectedUser,
+        userData,
+        setUserData,
+
+        chatData,
+        setChatData,
+
+        selectedUser,
+        setSelectedUser,
+
         loadUserData
-    }
+    };
+
 
     return (
         <AppContext.Provider value={value}>
             {props.children}
         </AppContext.Provider>
-    )
-}
+    );
+};
 
-export default AppContextProvider
+export default AppContextProvider;

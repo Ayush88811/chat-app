@@ -1,110 +1,483 @@
-.chat-box{
+/* ============================================================
+   MAIN CHAT BOX
+   ============================================================ */
+
+.chat-box {
+
     height: 75vh;
-    position: relative;
-    background-color: #f1f5ff;
-}
 
-.chat-user{
-    padding: 10px 15px;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    border-bottom: 1px solid #c6c6c6;
-}
+    background: #f1f5ff;
 
-.chat-user img{
-    width: 25px;
-    border-radius: 50%;
-}
+    display: flex;
 
-.chat-user img:first-child{
-    width: 38px;
-    aspect-ratio: 1/1;
-}
-
-.chat-user p{
-    flex: 1;
-    font-weight: 500;
-    font-size: 20px;
-    color: #393939;
-    display: flex;
-    align-items: center;
-    gap: 5px;
-}
-.chat-input{
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 10px 15px;
-    background: white;
-    position: absolute;
-    bottom: 0;
-    left: 0;
-    right: 0;
-}
-.chat-input img{
-    width: 30px;
-    cursor: pointer;
-}
-.chat-input label{
-    display: flex;
-}
-.chat-input label img{
-    width:22px;
-}
-.chat-input input{
-    flex: 1;
-    border: none;
-    outline: none;
-}
-.chat-msg{
-    height: calc(100% - 70px);
-    padding-bottom: 50px;
-    overflow-y: scroll;
-    display: flex;
-    flex-direction: column-reverse;
-}
-.s-msg div img, .r-msg div img{
-    width: 27px;
-    aspect-ratio: 1/1;
-    border-radius: 50%;
+    flex-direction: column;
 
 }
 
-.s-msg, .r-msg{
-    display: flex;
-    align-items: end;
-    justify-content: end;
-    gap: 5px;
+
+/* ============================================================
+   CHAT HEADER
+   ============================================================ */
+
+.chat-user {
+
+    height: 48px;
+
     padding: 0px 15px;
-}
-.r-msg{
-    flex-direction: row-reverse;
-    justify-content: start;
+
+    background: #f1f5ff;
+
+    border-bottom: 1px solid #d5d5d5;
+
+    display: flex;
+
+    align-items: center;
+
+    gap: 10px;
+
 }
 
-.msg{
+
+/* Selected user's profile image */
+
+.chat-user > img:first-child {
+
+    width: 32px;
+
+    height: 32px;
+
+    border-radius: 50%;
+
+    object-fit: cover;
+
+}
+
+
+/* Selected user's name */
+
+.chat-user p {
+
+    flex: 1;
+
+    margin: 0;
+
+    font-size: 16px;
+
+    color: #111;
+
+    display: flex;
+
+    align-items: center;
+
+    gap: 5px;
+
+}
+
+
+/* Green online dot */
+
+.chat-user .dot {
+
+    width: 7px;
+
+    height: 7px;
+
+}
+
+
+/* Info icon */
+
+.chat-user .help {
+
+    width: 20px;
+
+    height: 20px;
+
+    cursor: pointer;
+
+}
+
+
+/* ============================================================
+   MESSAGE AREA
+   ============================================================ */
+
+/*
+   IMPORTANT CHANGE:
+
+   Pehle fixed height ki wajah se messages ka layout
+   properly adjust nahi ho raha tha.
+
+   Ab flex: 1 use kiya hai.
+
+   Iska benefit:
+   Header + Input apni jagah rahenge
+   aur beech ka remaining area messages ke liye milega.
+*/
+
+.chat-msg {
+
+    flex: 1;
+
+    padding: 20px;
+
+    overflow-y: auto;
+
+    display: flex;
+
+    flex-direction: column;
+
+    gap: 12px;
+
+}
+
+
+/* ============================================================
+   CURRENT USER MESSAGE
+   ============================================================ */
+
+/*
+   Current user ka message RIGHT side me jayega.
+*/
+
+.s-msg {
+
+    max-width: 70%;
+
+    align-self: flex-end;
+
+    display: flex;
+
+    flex-direction: column;
+
+    align-items: flex-end;
+
+}
+
+
+/* ============================================================
+   RECEIVER MESSAGE
+   ============================================================ */
+
+/*
+   Dusre user ka message LEFT side me jayega.
+*/
+
+.r-msg {
+
+    max-width: 70%;
+
+    align-self: flex-start;
+
+    display: flex;
+
+    flex-direction: column;
+
+    align-items: flex-start;
+
+}
+
+
+/* ============================================================
+   CURRENT USER BUBBLE
+   ============================================================ */
+
+/*
+   Sender/current user = BLUE
+
+   WhatsApp-style right side bubble.
+*/
+
+.s-msg .msg {
+
+    background: #077eff;
+
     color: white;
-    background-color: #077EFF;
-    padding: 8px;
-    max-width: 200px;
-    font-size: 11px;
-    font-weight: 300;
-    border-radius: 8px 8px 0px 8px;
-    margin-bottom: 30px;
+
+    padding: 9px 13px;
+
+    margin: 0;
+
+    border-radius: 12px 12px 3px 12px;
+
+    font-size: 12px;
+
+    line-height: 1.4;
+
+    max-width: 100%;
+
+    word-break: break-word;
+
 }
 
-.r-msg .msg{
-    border-radius: 8px 8px 8px 0px;
+
+/* ============================================================
+   RECEIVER BUBBLE
+   ============================================================ */
+
+/*
+   Receiver = WHITE
+
+   Isse sender aur receiver clearly different
+   dikhte hain.
+*/
+
+.r-msg .msg {
+
+    background: white;
+
+    color: #333;
+
+    padding: 9px 13px;
+
+    margin: 0;
+
+    border-radius: 12px 12px 12px 3px;
+
+    font-size: 12px;
+
+    line-height: 1.4;
+
+    max-width: 100%;
+
+    word-break: break-word;
+
 }
 
-.s-msg div, .r-msg div{
-    text-align: center;
-    font-size: 9px;
-}
-.msg-img{
+
+/* ============================================================
+   MESSAGE IMAGE
+   ============================================================ */
+
+/*
+   Agar message text ki jagah image hai,
+   to ye CSS apply hogi.
+*/
+
+.msg-img {
+
     max-width: 230px;
-    margin-bottom: 30px;
+
+    max-height: 230px;
+
+    width: auto;
+
+    height: auto;
+
+    object-fit: cover;
+
     border-radius: 10px;
+
+    display: block;
+
 }
 
+
+/*
+   Sender ki image ke corners
+   thode WhatsApp-style rakhe hain.
+*/
+
+.s-msg .msg-img {
+
+    border-radius: 12px 12px 3px 12px;
+
+}
+
+
+/*
+   Receiver ki image ke corners
+*/
+
+.r-msg .msg-img {
+
+    border-radius: 12px 12px 12px 3px;
+
+}
+
+
+/* ============================================================
+   AVATAR + TIME
+   ============================================================ */
+
+.msg-info {
+
+    display: flex;
+
+    align-items: center;
+
+    gap: 5px;
+
+    margin-top: 4px;
+
+}
+
+
+/* Message ke neeche avatar */
+
+.msg-info img {
+
+    width: 22px;
+
+    height: 22px;
+
+    border-radius: 50%;
+
+    object-fit: cover;
+
+}
+
+
+/* Message time */
+
+.msg-info p {
+
+    margin: 0;
+
+    font-size: 8px;
+
+    color: #777;
+
+}
+
+
+/* ============================================================
+   NO MESSAGE TEXT
+   ============================================================ */
+
+.no-message {
+
+    margin: auto;
+
+    color: #777;
+
+    font-size: 13px;
+
+}
+
+
+/* ============================================================
+   MESSAGE INPUT
+   ============================================================ */
+
+.chat-input {
+
+    min-height: 60px;
+
+    background: white;
+
+    border-top: 1px solid #ddd;
+
+    display: flex;
+
+    align-items: center;
+
+    padding: 0px 10px;
+
+    gap: 10px;
+
+}
+
+
+/* Text input */
+
+.chat-input input[type="text"] {
+
+    flex: 1;
+
+    border: none;
+
+    outline: none;
+
+    font-size: 13px;
+
+    color: #333;
+
+}
+
+
+/* Placeholder */
+
+.chat-input input[type="text"]::placeholder {
+
+    color: #888;
+
+}
+
+
+/* Gallery icon */
+
+.chat-input label img {
+
+    width: 22px;
+
+    height: 22px;
+
+    cursor: pointer;
+
+    opacity: 0.7;
+
+}
+
+
+/* Send button */
+
+.chat-input .send-button {
+
+    width: 28px;
+
+    height: 28px;
+
+    cursor: pointer;
+
+}
+
+
+/* ============================================================
+   SCROLLBAR
+   ============================================================ */
+
+.chat-msg::-webkit-scrollbar {
+
+    width: 5px;
+
+}
+
+.chat-msg::-webkit-scrollbar-thumb {
+
+    background: #c5c5c5;
+
+    border-radius: 10px;
+
+}
+
+.chat-msg::-webkit-scrollbar-track {
+
+    background: transparent;
+
+}
+
+.online-dot {
+    width: 8px;
+    height: 8px;
+    background: #4cd137;
+    border-radius: 50%;
+    display: inline-block;
+    flex-shrink: 0;
+}
+
+.chat-user .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    object-fit: cover;
+    display: block;
+}
+.online-dot {
+    width: 8px;
+    height: 8px;
+    background: #4cd137;
+    border-radius: 50%;
+    display: inline-block;
+    flex-shrink: 0;
+}
