@@ -481,4 +481,20 @@
     display: inline-block;
     flex-shrink: 0;
 }
-3
+
+.user-status {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 10px;
+    color: #777;
+}
+
+.online-dot {
+    width: 7px;
+    height: 7px;
+    background: #4cd137;
+    border-radius: 50%;
+    display: inline-block;
+    flex-shrink: 0;
+}

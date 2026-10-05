@@ -2,13 +2,21 @@ import React, { useContext, useEffect, useState } from 'react'
 import './LeftSidebar.css';
 import assets from '../../assets/assets';
 import { auth, db } from '../../config/firebase';
-import { collection, getDocs } from 'firebase/firestore';
+import {
+    collection,
+    getDocs,
+    doc,
+    onSnapshot
+} from 'firebase/firestore';
 import { AppContext } from '../../context/AppContext';
 
 const LeftSidebar = () => {
 
     const [users, setUsers] = useState([]);
     const [search, setSearch] = useState("");
+
+    // Store latest message of each user
+    const [lastMessages, setLastMessages] = useState({});
 
     // Get selected user from context
     const { selectedUser, setSelectedUser } = useContext(AppContext);
@@ -48,6 +56,60 @@ const LeftSidebar = () => {
         fetchUsers();
 
     }, []);
+
+
+    // Listen for latest message of each user
+    useEffect(() => {
+
+        if (!auth.currentUser || users.length === 0) {
+            return;
+        }
+
+        const unsubscribeFunctions = [];
+
+        users.forEach((user) => {
+
+            const currentUserId = auth.currentUser.uid;
+            const selectedUserId = user.id;
+
+            // Same chat id for both users
+            const chatId = [currentUserId, selectedUserId]
+                .sort()
+                .join("_");
+
+            const chatRef = doc(db, "chats", chatId);
+
+            // Listen for changes in chat document
+            const unsubscribe = onSnapshot(chatRef, (snapshot) => {
+
+                if (snapshot.exists()) {
+
+                    const data = snapshot.data();
+
+                    setLastMessages((prev) => ({
+                        ...prev,
+                        [user.id]: data.lastMessage || null
+                    }));
+
+                }
+
+            });
+
+            unsubscribeFunctions.push(unsubscribe);
+
+        });
+
+
+        // Remove all listeners when component unmounts
+        return () => {
+
+            unsubscribeFunctions.forEach((unsubscribe) => {
+                unsubscribe();
+            });
+
+        };
+
+    }, [users]);
 
 
     // Filter users based on search
@@ -124,42 +186,55 @@ const LeftSidebar = () => {
 
             <div className="ls-list">
 
-                {filteredUsers.map((user) => (
+                {filteredUsers.map((user) => {
 
-                    <div
-                        key={user.id}
+                    const lastMessage = lastMessages[user.id];
 
-                        // Add selected class to currently opened chat
-                        className={`friends ${
-                            selectedUser?.id === user.id
-                                ? "selected"
-                                : ""
-                        }`}
+                    return (
 
-                        // Open this user's chat
-                        onClick={() => setSelectedUser(user)}
-                    >
+                        <div
+                            key={user.id}
 
-                        <img
-                            src={user.avatar || assets.profile_img}
-                            alt=""
-                        />
+                            // Highlight selected user
+                            className={`friends ${
+                                selectedUser?.id === user.id
+                                    ? "selected"
+                                    : ""
+                            }`}
 
-                        <div>
+                            // Open this user's chat
+                            onClick={() => setSelectedUser(user)}
+                        >
 
-                            <p>
-                                {user.name || user.username}
-                            </p>
+                            <img
+                                src={
+                                    user.avatar ||
+                                    assets.profile_img
+                                }
+                                alt=""
+                            />
 
-                            <span>
-                                {user.bio}
-                            </span>
+                            <div>
+
+                                <p>
+                                    {user.name || user.username}
+                                </p>
+
+                                <span>
+
+                                    {lastMessage
+                                        ? lastMessage.text
+                                        : user.bio}
+
+                                </span>
+
+                            </div>
 
                         </div>
 
-                    </div>
+                    );
 
-                ))}
+                })}
 
             </div>
 

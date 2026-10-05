@@ -11,12 +11,10 @@ const AppContextProvider = (props) => {
 
     const [userData, setUserData] = useState(null);
     const [chatData, setChatData] = useState(null);
-
-    // Currently selected user
     const [selectedUser, setSelectedUser] = useState(null);
 
 
-    // Get logged in user's data
+    // Get logged-in user's data
     const loadUserData = async (uid) => {
 
         try {
@@ -27,21 +25,25 @@ const AppContextProvider = (props) => {
             if (userSnap.exists()) {
 
                 const data = userSnap.data();
+                const currentTime = Date.now();
 
-                setUserData(data);
+                setUserData({
+                    ...data,
+                    lastSeen: currentTime
+                });
 
-                // Go to chat if profile is complete
+                // Update last seen when user opens the app
+                await updateDoc(userRef, {
+                    lastSeen: currentTime
+                });
+
+                // Open chat only when profile is complete
                 if (data.avatar && data.name) {
                     navigate("/chat");
-                }
-                else {
+                } else {
                     navigate("/profile");
                 }
 
-                // Update last seen
-                await updateDoc(userRef, {
-                    lastSeen: Date.now()
-                });
             }
 
         } catch (error) {
@@ -52,36 +54,40 @@ const AppContextProvider = (props) => {
     };
 
 
-    // Update last seen every 1 minute
+    // Keep lastSeen updated while the user is logged in
     useEffect(() => {
 
-        if (!auth.currentUser) return;
+        if (!userData?.id || !auth.currentUser) {
+            return;
+        }
 
-        const userRef = doc(db, "users", auth.currentUser.uid);
+        const userRef = doc(db, "users", userData.id);
 
-        const interval = setInterval(async () => {
+        const updateLastSeen = async () => {
 
-            if (auth.currentUser) {
+            try {
 
-                try {
+                await updateDoc(userRef, {
+                    lastSeen: Date.now()
+                });
 
-                    await updateDoc(userRef, {
-                        lastSeen: Date.now()
-                    });
+            } catch (error) {
 
-                } catch (error) {
+                console.error("Error updating last seen:", error);
 
-                    console.error("Error updating last seen:", error);
-
-                }
             }
+        };
 
+        // Update immediately, then every minute
+        updateLastSeen();
+
+        const interval = setInterval(() => {
+            updateLastSeen();
         }, 60000);
 
-        // Clear interval when component unmounts
         return () => clearInterval(interval);
 
-    }, [userData]);
+    }, [userData?.id]);
 
 
     const value = {
@@ -96,7 +102,6 @@ const AppContextProvider = (props) => {
 
         loadUserData
     };
-
 
     return (
         <AppContext.Provider value={value}>

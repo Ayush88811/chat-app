@@ -7,10 +7,12 @@ import { auth, db } from '../../config/firebase';
 import {
     addDoc,
     collection,
+    doc,
     onSnapshot,
     orderBy,
     query,
-    serverTimestamp
+    serverTimestamp,
+    setDoc
 } from 'firebase/firestore';
 
 import uploadImage from '../../lib/upload';
@@ -26,6 +28,32 @@ const ChatBox = () => {
 
     // Used to scroll to the latest message
     const messagesEndRef = useRef(null);
+
+    // Store selected user's latest data
+    const [selectedUserData, setSelectedUserData] = useState(null);
+
+
+    // Listen for selected user's profile changes
+    useEffect(() => {
+
+        if (!selectedUser?.id) {
+            setSelectedUserData(null);
+            return;
+        }
+
+        const userRef = doc(db, "users", selectedUser.id);
+
+        const unsubscribe = onSnapshot(userRef, (snapshot) => {
+
+            if (snapshot.exists()) {
+                setSelectedUserData(snapshot.data());
+            }
+
+        });
+
+        return () => unsubscribe();
+
+    }, [selectedUser?.id]);
 
 
     // Get messages whenever selected user changes
@@ -85,6 +113,47 @@ const ChatBox = () => {
     }, [messages]);
 
 
+    // Check selected user's online status
+    const isUserOnline = () => {
+
+        if (!selectedUserData?.lastSeen) {
+            return false;
+        }
+
+        const currentTime = Date.now();
+
+        // Consider user online if updated within last 2 minutes
+        return (
+            currentTime - selectedUserData.lastSeen <
+            2 * 60 * 1000
+        );
+
+    };
+
+
+    // Format last seen time
+    const formatLastSeen = () => {
+
+        if (!selectedUserData?.lastSeen) {
+            return "Offline";
+        }
+
+        if (isUserOnline()) {
+            return "Online";
+        }
+
+        const lastSeen = new Date(
+            selectedUserData.lastSeen
+        );
+
+        return `Last seen ${lastSeen.toLocaleTimeString([], {
+            hour: "2-digit",
+            minute: "2-digit"
+        })}`;
+
+    };
+
+
     // Send text message
     const sendMessage = async () => {
 
@@ -108,18 +177,32 @@ const ChatBox = () => {
                 "messages"
             );
 
+            // Add message
             await addDoc(messagesRef, {
 
                 senderId: currentUserId,
                 receiverId: selectedUserId,
                 text: message.trim(),
-
-                // Firebase server time
                 createdAt: serverTimestamp()
 
             });
 
-            // Clear input after sending
+
+            // Save latest message for sidebar preview
+            await setDoc(
+                doc(db, "chats", chatId),
+                {
+                    lastMessage: {
+                        text: message.trim(),
+                        senderId: currentUserId,
+                        createdAt: serverTimestamp()
+                    }
+                },
+                { merge: true }
+            );
+
+
+            // Clear input
             setMessage("");
 
         } catch (error) {
@@ -156,6 +239,7 @@ const ChatBox = () => {
                 "messages"
             );
 
+            // Add image message
             await addDoc(messagesRef, {
 
                 senderId: currentUserId,
@@ -165,6 +249,20 @@ const ChatBox = () => {
                 createdAt: serverTimestamp()
 
             });
+
+
+            // Save image as latest message
+            await setDoc(
+                doc(db, "chats", chatId),
+                {
+                    lastMessage: {
+                        text: "📷 Image",
+                        senderId: currentUserId,
+                        createdAt: serverTimestamp()
+                    }
+                },
+                { merge: true }
+            );
 
         } catch (error) {
 
@@ -222,6 +320,7 @@ const ChatBox = () => {
 
                 <img
                     src={
+                        selectedUserData?.avatar ||
                         selectedUser?.avatar ||
                         assets.profile_img
                     }
@@ -231,14 +330,24 @@ const ChatBox = () => {
                 <div className="chat-user-name">
 
                     <p>
-                        {selectedUser?.name ||
+                        {selectedUserData?.name ||
+                            selectedUser?.name ||
                             selectedUser?.username ||
                             "Select a user"}
                     </p>
 
-                    {/* Green online dot */}
                     {selectedUser && (
-                        <span className="online-dot"></span>
+                        <div className="user-status">
+
+                            {isUserOnline() && (
+                                <span className="online-dot"></span>
+                            )}
+
+                            <span>
+                                {formatLastSeen()}
+                            </span>
+
+                        </div>
                     )}
 
                 </div>
@@ -303,7 +412,6 @@ const ChatBox = () => {
 
                                 )}
 
-
                                 {/* Avatar and message time */}
 
                                 <div className="msg-info">
@@ -316,6 +424,7 @@ const ChatBox = () => {
                                                     assets.profile_img
                                                 )
                                                 : (
+                                                    selectedUserData?.avatar ||
                                                     selectedUser?.avatar ||
                                                     assets.profile_img
                                                 )
@@ -336,7 +445,7 @@ const ChatBox = () => {
 
                 )}
 
-                {/* Keeps the chat at the latest message */}
+                {/* Keeps chat at latest message */}
                 <div ref={messagesEndRef}></div>
 
             </div>
