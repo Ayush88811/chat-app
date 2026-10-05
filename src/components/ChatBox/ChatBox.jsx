@@ -1,4 +1,4 @@
-import React, { useContext, useEffect, useState } from 'react'
+import React, { useContext, useEffect, useRef, useState } from 'react'
 import './ChatBox.css';
 import assets from '../../assets/assets';
 import { AppContext } from '../../context/AppContext';
@@ -23,6 +23,9 @@ const ChatBox = () => {
 
     const [messages, setMessages] = useState([]);
     const [message, setMessage] = useState("");
+
+    // Used to scroll to the latest message
+    const messagesEndRef = useRef(null);
 
 
     // Get messages whenever selected user changes
@@ -70,6 +73,16 @@ const ChatBox = () => {
         return () => unsubscribe();
 
     }, [selectedUser]);
+
+
+    // Scroll to the latest message
+    useEffect(() => {
+
+        messagesEndRef.current?.scrollIntoView({
+            behavior: "smooth"
+        });
+
+    }, [messages]);
 
 
     // Send text message
@@ -322,6 +335,9 @@ const ChatBox = () => {
                     })
 
                 )}
+
+                {/* Keeps the chat at the latest message */}
+                <div ref={messagesEndRef}></div>
 
             </div>
 

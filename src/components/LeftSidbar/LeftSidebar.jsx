@@ -8,9 +8,10 @@ import { AppContext } from '../../context/AppContext';
 const LeftSidebar = () => {
 
     const [users, setUsers] = useState([]);
+    const [search, setSearch] = useState("");
 
-    // Get selected user function from context
-    const { setSelectedUser } = useContext(AppContext);
+    // Get selected user from context
+    const { selectedUser, setSelectedUser } = useContext(AppContext);
 
 
     // Fetch all users from Firebase
@@ -27,7 +28,7 @@ const LeftSidebar = () => {
                     ...doc.data(),
                     id: doc.id
                 }))
-                // Don't show logged in user in the list
+                // Don't show logged in user
                 .filter((user) => user.id !== auth.currentUser.uid);
 
             setUsers(usersList);
@@ -37,6 +38,7 @@ const LeftSidebar = () => {
             console.error("Error fetching users:", error);
 
         }
+
     };
 
 
@@ -46,6 +48,20 @@ const LeftSidebar = () => {
         fetchUsers();
 
     }, []);
+
+
+    // Filter users based on search
+    const filteredUsers = users.filter((user) => {
+
+        const searchText = search.toLowerCase();
+
+        return (
+            user.name?.toLowerCase().includes(searchText) ||
+            user.username?.toLowerCase().includes(searchText) ||
+            user.email?.toLowerCase().includes(searchText)
+        );
+
+    });
 
 
     return (
@@ -83,6 +99,8 @@ const LeftSidebar = () => {
                 </div>
 
 
+                {/* Search box */}
+
                 <div className='ls-search'>
 
                     <img
@@ -93,6 +111,8 @@ const LeftSidebar = () => {
                     <input
                         type="text"
                         placeholder='Search here..'
+                        value={search}
+                        onChange={(e) => setSearch(e.target.value)}
                     />
 
                 </div>
@@ -100,15 +120,23 @@ const LeftSidebar = () => {
             </div>
 
 
+            {/* User list */}
+
             <div className="ls-list">
 
-                {users.map((user) => (
+                {filteredUsers.map((user) => (
 
                     <div
                         key={user.id}
-                        className="friends"
 
-                        // Select this user when clicked
+                        // Add selected class to currently opened chat
+                        className={`friends ${
+                            selectedUser?.id === user.id
+                                ? "selected"
+                                : ""
+                        }`}
+
+                        // Open this user's chat
                         onClick={() => setSelectedUser(user)}
                     >
 
@@ -139,4 +167,4 @@ const LeftSidebar = () => {
     )
 }
 
-export default LeftSidebar
+export default LeftSidebar;
