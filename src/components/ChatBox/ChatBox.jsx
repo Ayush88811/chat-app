@@ -7,6 +7,7 @@ import { auth, db } from '../../config/firebase';
 import {
     addDoc,
     collection,
+    deleteDoc,
     doc,
     getDocs,
     onSnapshot,
@@ -23,20 +24,26 @@ import uploadImage from '../../lib/upload';
 
 const ChatBox = () => {
 
-    // Get selected user and current user's data
     const { selectedUser, userData } = useContext(AppContext);
 
     const [messages, setMessages] = useState([]);
     const [message, setMessage] = useState("");
 
-    // Selected user's latest profile data
+    // Selected user's latest data
     const [selectedUserData, setSelectedUserData] = useState(null);
 
-    // Used for auto-scroll
+    // Edit message states
+    const [editingMessageId, setEditingMessageId] = useState(null);
+    const [editText, setEditText] = useState("");
+
+    // Message menu
+    const [menuMessageId, setMenuMessageId] = useState(null);
+
+    // Auto-scroll
     const messagesEndRef = useRef(null);
 
 
-    // Listen for selected user's profile changes
+    // Get selected user's latest profile data
     useEffect(() => {
 
         if (!selectedUser?.id) {
@@ -44,22 +51,29 @@ const ChatBox = () => {
             return;
         }
 
-        const userRef = doc(db, "users", selectedUser.id);
+        const userRef = doc(
+            db,
+            "users",
+            selectedUser.id
+        );
 
-        const unsubscribe = onSnapshot(userRef, (snapshot) => {
+        const unsubscribe = onSnapshot(
+            userRef,
+            (snapshot) => {
 
-            if (snapshot.exists()) {
-                setSelectedUserData(snapshot.data());
+                if (snapshot.exists()) {
+                    setSelectedUserData(snapshot.data());
+                }
+
             }
-
-        });
+        );
 
         return () => unsubscribe();
 
     }, [selectedUser?.id]);
 
 
-    // Get messages whenever selected user changes
+    // Get messages in real time
     useEffect(() => {
 
         if (!selectedUser || !auth.currentUser) {
@@ -67,13 +81,20 @@ const ChatBox = () => {
             return;
         }
 
-        const currentUserId = auth.currentUser.uid;
-        const selectedUserId = selectedUser.id;
+        const currentUserId =
+            auth.currentUser.uid;
+
+        const selectedUserId =
+            selectedUser.id;
 
         // Same chat id for both users
-        const chatId = [currentUserId, selectedUserId]
+        const chatId = [
+            currentUserId,
+            selectedUserId
+        ]
             .sort()
             .join("_");
+
 
         const messagesRef = collection(
             db,
@@ -82,87 +103,78 @@ const ChatBox = () => {
             "messages"
         );
 
-        // Get messages in old -> new order
+
+        // Get old messages first
         const q = query(
             messagesRef,
             orderBy("createdAt", "asc")
         );
 
-        // Listen for messages in real time
-        const unsubscribe = onSnapshot(q, (snapshot) => {
 
-            const messagesList = snapshot.docs.map((doc) => ({
-                id: doc.id,
-                ...doc.data()
-            }));
+        // Listen for new messages
+        const unsubscribe = onSnapshot(
+            q,
+            (snapshot) => {
 
-            setMessages(messagesList);
-
-        });
-
-        return () => unsubscribe();
-
-    }, [selectedUser]);
+                const messagesList =
+                    snapshot.docs.map((messageDoc) => ({
+                        id: messageDoc.id,
+                        ...messageDoc.data()
+                    }));
 
 
-    // Mark received messages as read
-    useEffect(() => {
+                setMessages(messagesList);
 
-        const markMessagesAsRead = async () => {
 
-            if (!selectedUser || !auth.currentUser) {
-                return;
-            }
+                // Mark received unread messages as read
+                messagesList.forEach(async (msg) => {
 
-            const currentUserId = auth.currentUser.uid;
-            const selectedUserId = selectedUser.id;
+                    if (
+                        msg.receiverId === currentUserId &&
+                        msg.read === false
+                    ) {
 
-            const chatId = [currentUserId, selectedUserId]
-                .sort()
-                .join("_");
+                        try {
 
-            const messagesRef = collection(
-                db,
-                "chats",
-                chatId,
-                "messages"
-            );
+                            await updateDoc(
+                                doc(
+                                    db,
+                                    "chats",
+                                    chatId,
+                                    "messages",
+                                    msg.id
+                                ),
+                                {
+                                    read: true
+                                }
+                            );
 
-            // Find unread messages received by current user
-            const unreadQuery = query(
-                messagesRef,
-                where("receiverId", "==", currentUserId),
-                where("read", "==", false)
-            );
+                        } catch (error) {
 
-            try {
+                            console.error(
+                                "Error marking message as read:",
+                                error
+                            );
 
-                const snapshot = await getDocs(unreadQuery);
-
-                // Mark each message as read
-                snapshot.docs.forEach(async (messageDoc) => {
-
-                    await updateDoc(
-                        messageDoc.ref,
-                        {
-                            read: true
                         }
-                    );
+
+                    }
 
                 });
 
-            } catch (error) {
+            },
+            (error) => {
 
                 console.error(
-                    "Error marking messages as read:",
+                    "Error loading messages:",
                     error
                 );
 
             }
+        );
 
-        };
 
-        markMessagesAsRead();
+        return () => unsubscribe();
 
     }, [selectedUser]);
 
@@ -177,24 +189,23 @@ const ChatBox = () => {
     }, [messages]);
 
 
-    // Check selected user's online status
+    // Check online status
     const isUserOnline = () => {
 
         if (!selectedUserData?.lastSeen) {
             return false;
         }
 
-        const currentTime = Date.now();
-
         return (
-            currentTime - selectedUserData.lastSeen <
+            Date.now() -
+            selectedUserData.lastSeen <
             2 * 60 * 1000
         );
 
     };
 
 
-    // Format last seen time
+    // Format last seen
     const formatLastSeen = () => {
 
         if (!selectedUserData?.lastSeen) {
@@ -226,12 +237,20 @@ const ChatBox = () => {
 
         try {
 
-            const currentUserId = auth.currentUser.uid;
-            const selectedUserId = selectedUser.id;
+            const currentUserId =
+                auth.currentUser.uid;
 
-            const chatId = [currentUserId, selectedUserId]
+            const selectedUserId =
+                selectedUser.id;
+
+
+            const chatId = [
+                currentUserId,
+                selectedUserId
+            ]
                 .sort()
                 .join("_");
+
 
             const messagesRef = collection(
                 db,
@@ -240,14 +259,15 @@ const ChatBox = () => {
                 "messages"
             );
 
-            // Add new text message
+
+            // Add new message
             await addDoc(messagesRef, {
 
                 senderId: currentUserId,
                 receiverId: selectedUserId,
                 text: message.trim(),
 
-                // Message is unread until receiver opens chat
+                // Receiver has not read it yet
                 read: false,
 
                 createdAt: serverTimestamp()
@@ -257,7 +277,11 @@ const ChatBox = () => {
 
             // Update latest message
             await setDoc(
-                doc(db, "chats", chatId),
+                doc(
+                    db,
+                    "chats",
+                    chatId
+                ),
                 {
                     lastMessage: {
                         text: message.trim(),
@@ -265,7 +289,9 @@ const ChatBox = () => {
                         createdAt: serverTimestamp()
                     }
                 },
-                { merge: true }
+                {
+                    merge: true
+                }
             );
 
 
@@ -280,6 +306,7 @@ const ChatBox = () => {
             );
 
         }
+
     };
 
 
@@ -292,15 +319,25 @@ const ChatBox = () => {
 
         try {
 
-            const currentUserId = auth.currentUser.uid;
-            const selectedUserId = selectedUser.id;
+            const currentUserId =
+                auth.currentUser.uid;
+
+            const selectedUserId =
+                selectedUser.id;
+
 
             // Upload image to Cloudinary
-            const imageUrl = await uploadImage(file);
+            const imageUrl =
+                await uploadImage(file);
 
-            const chatId = [currentUserId, selectedUserId]
+
+            const chatId = [
+                currentUserId,
+                selectedUserId
+            ]
                 .sort()
                 .join("_");
+
 
             const messagesRef = collection(
                 db,
@@ -308,6 +345,7 @@ const ChatBox = () => {
                 chatId,
                 "messages"
             );
+
 
             // Add image message
             await addDoc(messagesRef, {
@@ -317,7 +355,7 @@ const ChatBox = () => {
                 text: "",
                 image: imageUrl,
 
-                // Image message is also unread
+                // Receiver has not read it yet
                 read: false,
 
                 createdAt: serverTimestamp()
@@ -327,7 +365,11 @@ const ChatBox = () => {
 
             // Update latest message
             await setDoc(
-                doc(db, "chats", chatId),
+                doc(
+                    db,
+                    "chats",
+                    chatId
+                ),
                 {
                     lastMessage: {
                         text: "📷 Image",
@@ -335,7 +377,9 @@ const ChatBox = () => {
                         createdAt: serverTimestamp()
                     }
                 },
-                { merge: true }
+                {
+                    merge: true
+                }
             );
 
         } catch (error) {
@@ -346,6 +390,7 @@ const ChatBox = () => {
             );
 
         }
+
     };
 
 
@@ -361,11 +406,163 @@ const ChatBox = () => {
     };
 
 
+    // Start editing
+    const startEdit = (msg) => {
+
+        setEditingMessageId(msg.id);
+        setEditText(msg.text || "");
+
+        setMenuMessageId(null);
+
+    };
+
+
+    // Cancel editing
+    const cancelEdit = () => {
+
+        setEditingMessageId(null);
+        setEditText("");
+
+    };
+
+
+    // Save edited message
+    const saveEdit = async () => {
+
+        if (
+            !editText.trim() ||
+            !editingMessageId ||
+            !selectedUser
+        ) {
+            return;
+        }
+
+        try {
+
+            const chatId = [
+                auth.currentUser.uid,
+                selectedUser.id
+            ]
+                .sort()
+                .join("_");
+
+
+            await updateDoc(
+                doc(
+                    db,
+                    "chats",
+                    chatId,
+                    "messages",
+                    editingMessageId
+                ),
+                {
+                    text: editText.trim(),
+                    edited: true
+                }
+            );
+
+
+            // Update last message if this
+            // edited message is the latest one
+            const latestMessage =
+                messages[messages.length - 1];
+
+
+            if (
+                latestMessage?.id ===
+                editingMessageId
+            ) {
+
+                await setDoc(
+                    doc(
+                        db,
+                        "chats",
+                        chatId
+                    ),
+                    {
+                        lastMessage: {
+                            text: editText.trim(),
+                            senderId:
+                                auth.currentUser.uid,
+                            createdAt:
+                                latestMessage.createdAt
+                        }
+                    },
+                    {
+                        merge: true
+                    }
+                );
+
+            }
+
+
+            cancelEdit();
+
+        } catch (error) {
+
+            console.error(
+                "Error editing message:",
+                error
+            );
+
+        }
+
+    };
+
+
+    // Delete message
+    const deleteMessage = async (messageId) => {
+
+        if (!selectedUser) {
+            return;
+        }
+
+        try {
+
+            const chatId = [
+                auth.currentUser.uid,
+                selectedUser.id
+            ]
+                .sort()
+                .join("_");
+
+
+            await deleteDoc(
+                doc(
+                    db,
+                    "chats",
+                    chatId,
+                    "messages",
+                    messageId
+                )
+            );
+
+
+            setMenuMessageId(null);
+
+        } catch (error) {
+
+            console.error(
+                "Error deleting message:",
+                error
+            );
+
+        }
+
+    };
+
+
     // Send message with Enter
     const handleKeyDown = (e) => {
 
         if (e.key === "Enter") {
-            sendMessage();
+
+            if (editingMessageId) {
+                saveEdit();
+            } else {
+                sendMessage();
+            }
+
         }
 
     };
@@ -391,6 +588,7 @@ const ChatBox = () => {
     return (
         <div className='chat-box'>
 
+
             {/* Chat header */}
 
             <div className="chat-user">
@@ -404,6 +602,7 @@ const ChatBox = () => {
                     alt=""
                 />
 
+
                 <div className="chat-user-name">
 
                     <p>
@@ -412,6 +611,7 @@ const ChatBox = () => {
                             selectedUser?.username ||
                             "Select a user"}
                     </p>
+
 
                     {selectedUser && (
 
@@ -430,6 +630,7 @@ const ChatBox = () => {
                     )}
 
                 </div>
+
 
                 <img
                     src={assets.help_icon}
@@ -460,9 +661,10 @@ const ChatBox = () => {
 
                     messages.map((msg) => {
 
-                        // Check sender
                         const isSender =
-                            msg.senderId === auth.currentUser.uid;
+                            msg.senderId ===
+                            auth.currentUser.uid;
+
 
                         return (
 
@@ -475,21 +677,140 @@ const ChatBox = () => {
                                 }
                             >
 
-                                {/* Message text or image */}
 
-                                {msg.image ? (
+                                {/* Edit mode */}
 
-                                    <img
-                                        className="msg-img"
-                                        src={msg.image}
-                                        alt="message"
-                                    />
+                                {editingMessageId === msg.id ? (
+
+                                    <div className="edit-box">
+
+                                        <input
+                                            type="text"
+                                            value={editText}
+                                            onChange={(e) =>
+                                                setEditText(
+                                                    e.target.value
+                                                )
+                                            }
+                                            onKeyDown={
+                                                handleKeyDown
+                                            }
+                                            autoFocus
+                                        />
+
+
+                                        <div className="edit-buttons">
+
+                                            <button
+                                                onClick={
+                                                    saveEdit
+                                                }
+                                            >
+                                                Save
+                                            </button>
+
+                                            <button
+                                                onClick={
+                                                    cancelEdit
+                                                }
+                                            >
+                                                Cancel
+                                            </button>
+
+                                        </div>
+
+                                    </div>
 
                                 ) : (
 
-                                    <p className="msg">
-                                        {msg.text}
-                                    </p>
+                                    <>
+
+                                        {/* Image or text */}
+
+                                        {msg.image ? (
+
+                                            <img
+                                                className="msg-img"
+                                                src={msg.image}
+                                                alt="message"
+                                            />
+
+                                        ) : (
+
+                                            <p className="msg">
+
+                                                {msg.text}
+
+                                                {msg.edited && (
+                                                    <span className="edited-text">
+                                                        {" "}edited
+                                                    </span>
+                                                )}
+
+                                            </p>
+
+                                        )}
+
+
+                                        {/* Message menu */}
+
+                                        {isSender && (
+
+                                            <div className="message-options">
+
+                                                <button
+                                                    className="more-btn"
+                                                    onClick={() =>
+                                                        setMenuMessageId(
+                                                            menuMessageId ===
+                                                                msg.id
+                                                                ? null
+                                                                : msg.id
+                                                        )
+                                                    }
+                                                >
+                                                    ⋮
+                                                </button>
+
+
+                                                {menuMessageId ===
+                                                    msg.id && (
+
+                                                    <div className="message-menu">
+
+                                                        {/* Images cannot be edited */}
+                                                        {!msg.image && (
+                                                            <button
+                                                                onClick={() =>
+                                                                    startEdit(
+                                                                        msg
+                                                                    )
+                                                                }
+                                                            >
+                                                                Edit
+                                                            </button>
+                                                        )}
+
+
+                                                        <button
+                                                            onClick={() =>
+                                                                deleteMessage(
+                                                                    msg.id
+                                                                )
+                                                            }
+                                                        >
+                                                            Delete
+                                                        </button>
+
+                                                    </div>
+
+                                                )}
+
+                                            </div>
+
+                                        )}
+
+                                    </>
 
                                 )}
 
@@ -514,13 +835,18 @@ const ChatBox = () => {
                                         alt=""
                                     />
 
+
                                     <p>
-                                        {formatTime(msg.createdAt)}
+                                        {formatTime(
+                                            msg.createdAt
+                                        )}
                                     </p>
 
-                                    {/* Read status only for sent messages */}
+
+                                    {/* Read receipt */}
 
                                     {isSender && (
+
                                         <span
                                             className={
                                                 msg.read
@@ -528,8 +854,11 @@ const ChatBox = () => {
                                                     : "read-status"
                                             }
                                         >
-                                            {msg.read ? "✓✓" : "✓"}
+                                            {msg.read
+                                                ? "✓✓"
+                                                : "✓"}
                                         </span>
+
                                     )}
 
                                 </div>
@@ -542,7 +871,9 @@ const ChatBox = () => {
 
                 )}
 
-                {/* Auto-scroll target */}
+
+                {/* Auto scroll target */}
+
                 <div ref={messagesEndRef}></div>
 
             </div>
@@ -556,9 +887,12 @@ const ChatBox = () => {
                     type="text"
                     placeholder="Send a message"
                     value={message}
-                    onChange={(e) => setMessage(e.target.value)}
+                    onChange={(e) =>
+                        setMessage(e.target.value)
+                    }
                     onKeyDown={handleKeyDown}
                 />
+
 
                 {/* Image input */}
 
@@ -570,6 +904,7 @@ const ChatBox = () => {
                     onChange={handleImageChange}
                 />
 
+
                 <label htmlFor="image">
 
                     <img
@@ -578,6 +913,7 @@ const ChatBox = () => {
                     />
 
                 </label>
+
 
                 {/* Send button */}
 

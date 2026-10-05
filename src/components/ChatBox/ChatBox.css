@@ -508,3 +508,76 @@
 .read-status.read {
     color: #2196f3;
 }
+.message-options {
+    position: relative;
+    display: inline-block;
+}
+
+.more-btn {
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    font-size: 18px;
+    color: #777;
+    padding: 2px 5px;
+}
+
+.message-menu {
+    position: absolute;
+    right: 0;
+    bottom: 25px;
+    background: white;
+    border-radius: 6px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.15);
+    overflow: hidden;
+    z-index: 10;
+}
+
+.message-menu button {
+    display: block;
+    width: 80px;
+    padding: 8px 10px;
+    border: none;
+    background: white;
+    cursor: pointer;
+    text-align: left;
+    font-size: 12px;
+}
+
+.message-menu button:hover {
+    background: #f1f1f1;
+}
+
+.edited-text {
+    font-size: 9px;
+    color: #888;
+    margin-left: 3px;
+}
+
+.edit-box {
+    background: white;
+    padding: 8px;
+    border-radius: 8px;
+}
+
+.edit-box input {
+    width: 180px;
+    border: 1px solid #ddd;
+    outline: none;
+    padding: 6px;
+    border-radius: 5px;
+}
+
+.edit-buttons {
+    display: flex;
+    gap: 5px;
+    margin-top: 5px;
+}
+
+.edit-buttons button {
+    border: none;
+    padding: 4px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 10px;
+}

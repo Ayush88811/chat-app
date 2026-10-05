@@ -1,16 +1,18 @@
 import React, { useContext, useEffect, useState } from 'react'
 import './LeftSidebar.css';
 import assets from '../../assets/assets';
-import { auth, db } from '../../config/firebase';
+import { auth, db, logout } from '../../config/firebase';
 
 import {
     collection,
-    doc,
     getDocs,
-    onSnapshot
+    onSnapshot,
+    orderBy,
+    query
 } from 'firebase/firestore';
 
 import { AppContext } from '../../context/AppContext';
+import { useNavigate } from 'react-router-dom';
 
 
 const LeftSidebar = () => {
@@ -18,17 +20,18 @@ const LeftSidebar = () => {
     const [users, setUsers] = useState([]);
     const [search, setSearch] = useState("");
 
-    // Store latest message of each user
+    // Store latest message of every chat
     const [lastMessages, setLastMessages] = useState({});
 
-    // Store unread count of each user
+    // Store unread count of every chat
     const [unreadCounts, setUnreadCounts] = useState({});
 
-    // Get selected user from context
     const {
         selectedUser,
         setSelectedUser
     } = useContext(AppContext);
+
+    const navigate = useNavigate();
 
 
     // Fetch all users
@@ -47,7 +50,7 @@ const LeftSidebar = () => {
                 }))
                 .filter(
                     (user) =>
-                        user.id !== auth.currentUser.uid
+                        user.id !== auth.currentUser?.uid
                 );
 
             setUsers(usersList);
@@ -64,7 +67,7 @@ const LeftSidebar = () => {
     };
 
 
-    // Fetch users when sidebar loads
+    // Load users when sidebar opens
     useEffect(() => {
 
         fetchUsers();
@@ -72,7 +75,7 @@ const LeftSidebar = () => {
     }, []);
 
 
-    // Listen for latest message
+    // Listen for latest message and unread messages
     useEffect(() => {
 
         if (!auth.currentUser || users.length === 0) {
@@ -81,12 +84,14 @@ const LeftSidebar = () => {
 
         const unsubscribeFunctions = [];
 
+        const currentUserId =
+            auth.currentUser.uid;
+
+
         users.forEach((user) => {
 
-            const currentUserId =
-                auth.currentUser.uid;
-
             const selectedUserId = user.id;
+
 
             // Same chat id for both users
             const chatId = [
@@ -97,40 +102,6 @@ const LeftSidebar = () => {
                 .join("_");
 
 
-            // -------------------------------
-            // Listen for last message
-            // -------------------------------
-
-            const chatRef = doc(
-                db,
-                "chats",
-                chatId
-            );
-
-            const unsubscribeChat = onSnapshot(
-                chatRef,
-                (snapshot) => {
-
-                    if (snapshot.exists()) {
-
-                        const data = snapshot.data();
-
-                        setLastMessages((prev) => ({
-                            ...prev,
-                            [user.id]:
-                                data.lastMessage || null
-                        }));
-
-                    }
-
-                }
-            );
-
-
-            // -------------------------------
-            // Listen for unread messages
-            // -------------------------------
-
             const messagesRef = collection(
                 db,
                 "chats",
@@ -138,61 +109,96 @@ const LeftSidebar = () => {
                 "messages"
             );
 
-            const unsubscribeMessages =
-                onSnapshot(
-                    messagesRef,
-                    (snapshot) => {
 
-                        let unreadCount = 0;
+            // Get all messages ordered by time
+            const q = query(
+                messagesRef,
+                orderBy("createdAt", "desc")
+            );
 
-                        snapshot.docs.forEach(
-                            (messageDoc) => {
 
-                                const message =
-                                    messageDoc.data();
+            const unsubscribe = onSnapshot(
+                q,
+                (snapshot) => {
 
-                                // Count only messages
-                                // received by current user
-                                if (
-                                    message.receiverId ===
-                                        currentUserId &&
-                                    message.read === false
-                                ) {
-                                    unreadCount++;
-                                }
+                    // Convert messages into array
+                    const messages = snapshot.docs.map(
+                        (messageDoc) => ({
+                            id: messageDoc.id,
+                            ...messageDoc.data()
+                        })
+                    );
 
-                            }
-                        );
 
+                    // No messages
+                    if (messages.length === 0) {
+
+                        setLastMessages((prev) => ({
+                            ...prev,
+                            [user.id]: null
+                        }));
 
                         setUnreadCounts((prev) => ({
                             ...prev,
-                            [user.id]: unreadCount
+                            [user.id]: 0
                         }));
 
+                        return;
+
                     }
-                );
 
 
-            unsubscribeFunctions.push(
-                unsubscribeChat
+                    // Latest message
+                    const latestMessage =
+                        messages[0];
+
+
+                    setLastMessages((prev) => ({
+                        ...prev,
+                        [user.id]: latestMessage
+                    }));
+
+
+                    // Count messages received by current user
+                    // which are still unread
+                    const unreadCount =
+                        messages.filter(
+                            (msg) =>
+                                msg.receiverId ===
+                                    currentUserId &&
+                                msg.read === false
+                        ).length;
+
+
+                    setUnreadCounts((prev) => ({
+                        ...prev,
+                        [user.id]: unreadCount
+                    }));
+
+                },
+                (error) => {
+
+                    console.error(
+                        "Error loading messages:",
+                        error
+                    );
+
+                }
             );
 
+
             unsubscribeFunctions.push(
-                unsubscribeMessages
+                unsubscribe
             );
 
         });
 
 
-        // Remove all listeners
-        // when sidebar unmounts
+        // Remove listeners
         return () => {
 
             unsubscribeFunctions.forEach(
-                (unsubscribe) => {
-                    unsubscribe();
-                }
+                (unsubscribe) => unsubscribe()
             );
 
         };
@@ -225,6 +231,70 @@ const LeftSidebar = () => {
     );
 
 
+    // Format message time
+    const formatTime = (timestamp) => {
+
+        if (!timestamp?.toDate) {
+            return "";
+        }
+
+        return timestamp
+            .toDate()
+            .toLocaleTimeString([], {
+                hour: "2-digit",
+                minute: "2-digit"
+            });
+
+    };
+
+
+    // Show message preview
+    const getMessagePreview = (message) => {
+
+        if (!message) {
+            return "";
+        }
+
+        if (message.image) {
+            return "📷 Image";
+        }
+
+        return message.text || "";
+
+    };
+
+
+    // Edit profile
+    const handleEditProfile = () => {
+
+        navigate("/profile");
+
+    };
+
+
+    // Logout
+    const handleLogout = async () => {
+
+        try {
+
+            await logout();
+
+            setSelectedUser(null);
+
+            navigate("/");
+
+        } catch (error) {
+
+            console.error(
+                "Logout error:",
+                error
+            );
+
+        }
+
+    };
+
+
     return (
         <div className='ls'>
 
@@ -247,11 +317,23 @@ const LeftSidebar = () => {
 
                         <div className="sub-menu">
 
-                            <p>Edit Profile</p>
+                            <p
+                                onClick={
+                                    handleEditProfile
+                                }
+                            >
+                                Edit Profile
+                            </p>
 
                             <hr />
 
-                            <p>Logout</p>
+                            <p
+                                onClick={
+                                    handleLogout
+                                }
+                            >
+                                Logout
+                            </p>
 
                         </div>
 
@@ -260,7 +342,7 @@ const LeftSidebar = () => {
                 </div>
 
 
-                {/* Search box */}
+                {/* Search */}
 
                 <div className='ls-search'>
 
@@ -274,7 +356,9 @@ const LeftSidebar = () => {
                         placeholder='Search here..'
                         value={search}
                         onChange={(e) =>
-                            setSearch(e.target.value)
+                            setSearch(
+                                e.target.value
+                            )
                         }
                     />
 
@@ -323,33 +407,48 @@ const LeftSidebar = () => {
 
                             <div className="friend-info">
 
-                                <p>
-                                    {user.name ||
-                                        user.username}
-                                </p>
+                                <div className="friend-name-row">
 
-                                <span>
+                                    <p>
+                                        {user.name ||
+                                            user.username}
+                                    </p>
 
-                                    {lastMessage
-                                        ? lastMessage.text
-                                        : user.bio}
-
-                                </span>
-
-                            </div>
-
-
-                            {/* Unread count */}
-
-                            {unreadCount > 0 && (
-
-                                <div className="unread-count">
-
-                                    {unreadCount}
+                                    {lastMessage && (
+                                        <span className="last-time">
+                                            {formatTime(
+                                                lastMessage.createdAt
+                                            )}
+                                        </span>
+                                    )}
 
                                 </div>
 
-                            )}
+
+                                <div className="friend-message-row">
+
+                                    <span className="last-message">
+
+                                        {lastMessage
+                                            ? getMessagePreview(
+                                                lastMessage
+                                            )
+                                            : user.bio}
+
+                                    </span>
+
+
+                                    {/* Unread count */}
+
+                                    {unreadCount > 0 && (
+                                        <span className="unread-count">
+                                            {unreadCount}
+                                        </span>
+                                    )}
+
+                                </div>
+
+                            </div>
 
                         </div>
 
