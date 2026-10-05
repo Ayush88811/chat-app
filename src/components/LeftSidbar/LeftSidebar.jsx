@@ -2,13 +2,16 @@ import React, { useContext, useEffect, useState } from 'react'
 import './LeftSidebar.css';
 import assets from '../../assets/assets';
 import { auth, db } from '../../config/firebase';
+
 import {
     collection,
-    getDocs,
     doc,
+    getDocs,
     onSnapshot
 } from 'firebase/firestore';
+
 import { AppContext } from '../../context/AppContext';
+
 
 const LeftSidebar = () => {
 
@@ -18,11 +21,17 @@ const LeftSidebar = () => {
     // Store latest message of each user
     const [lastMessages, setLastMessages] = useState({});
 
+    // Store unread count of each user
+    const [unreadCounts, setUnreadCounts] = useState({});
+
     // Get selected user from context
-    const { selectedUser, setSelectedUser } = useContext(AppContext);
+    const {
+        selectedUser,
+        setSelectedUser
+    } = useContext(AppContext);
 
 
-    // Fetch all users from Firebase
+    // Fetch all users
     const fetchUsers = async () => {
 
         try {
@@ -36,14 +45,19 @@ const LeftSidebar = () => {
                     ...doc.data(),
                     id: doc.id
                 }))
-                // Don't show logged in user
-                .filter((user) => user.id !== auth.currentUser.uid);
+                .filter(
+                    (user) =>
+                        user.id !== auth.currentUser.uid
+                );
 
             setUsers(usersList);
 
         } catch (error) {
 
-            console.error("Error fetching users:", error);
+            console.error(
+                "Error fetching users:",
+                error
+            );
 
         }
 
@@ -58,7 +72,7 @@ const LeftSidebar = () => {
     }, []);
 
 
-    // Listen for latest message of each user
+    // Listen for latest message
     useEffect(() => {
 
         if (!auth.currentUser || users.length === 0) {
@@ -69,61 +83,146 @@ const LeftSidebar = () => {
 
         users.forEach((user) => {
 
-            const currentUserId = auth.currentUser.uid;
+            const currentUserId =
+                auth.currentUser.uid;
+
             const selectedUserId = user.id;
 
             // Same chat id for both users
-            const chatId = [currentUserId, selectedUserId]
+            const chatId = [
+                currentUserId,
+                selectedUserId
+            ]
                 .sort()
                 .join("_");
 
-            const chatRef = doc(db, "chats", chatId);
 
-            // Listen for changes in chat document
-            const unsubscribe = onSnapshot(chatRef, (snapshot) => {
+            // -------------------------------
+            // Listen for last message
+            // -------------------------------
 
-                if (snapshot.exists()) {
+            const chatRef = doc(
+                db,
+                "chats",
+                chatId
+            );
 
-                    const data = snapshot.data();
+            const unsubscribeChat = onSnapshot(
+                chatRef,
+                (snapshot) => {
 
-                    setLastMessages((prev) => ({
-                        ...prev,
-                        [user.id]: data.lastMessage || null
-                    }));
+                    if (snapshot.exists()) {
+
+                        const data = snapshot.data();
+
+                        setLastMessages((prev) => ({
+                            ...prev,
+                            [user.id]:
+                                data.lastMessage || null
+                        }));
+
+                    }
 
                 }
+            );
 
-            });
 
-            unsubscribeFunctions.push(unsubscribe);
+            // -------------------------------
+            // Listen for unread messages
+            // -------------------------------
+
+            const messagesRef = collection(
+                db,
+                "chats",
+                chatId,
+                "messages"
+            );
+
+            const unsubscribeMessages =
+                onSnapshot(
+                    messagesRef,
+                    (snapshot) => {
+
+                        let unreadCount = 0;
+
+                        snapshot.docs.forEach(
+                            (messageDoc) => {
+
+                                const message =
+                                    messageDoc.data();
+
+                                // Count only messages
+                                // received by current user
+                                if (
+                                    message.receiverId ===
+                                        currentUserId &&
+                                    message.read === false
+                                ) {
+                                    unreadCount++;
+                                }
+
+                            }
+                        );
+
+
+                        setUnreadCounts((prev) => ({
+                            ...prev,
+                            [user.id]: unreadCount
+                        }));
+
+                    }
+                );
+
+
+            unsubscribeFunctions.push(
+                unsubscribeChat
+            );
+
+            unsubscribeFunctions.push(
+                unsubscribeMessages
+            );
 
         });
 
 
-        // Remove all listeners when component unmounts
+        // Remove all listeners
+        // when sidebar unmounts
         return () => {
 
-            unsubscribeFunctions.forEach((unsubscribe) => {
-                unsubscribe();
-            });
+            unsubscribeFunctions.forEach(
+                (unsubscribe) => {
+                    unsubscribe();
+                }
+            );
 
         };
 
     }, [users]);
 
 
-    // Filter users based on search
-    const filteredUsers = users.filter((user) => {
+    // Search users
+    const filteredUsers = users.filter(
+        (user) => {
 
-        const searchText = search.toLowerCase();
+            const searchText =
+                search.toLowerCase();
 
-        return (
-            user.name?.toLowerCase().includes(searchText) ||
-            user.username?.toLowerCase().includes(searchText) ||
-            user.email?.toLowerCase().includes(searchText)
-        );
+            return (
+                user.name
+                    ?.toLowerCase()
+                    .includes(searchText) ||
 
-    });
+                user.username
+                    ?.toLowerCase()
+                    .includes(searchText) ||
+
+                user.email
+                    ?.toLowerCase()
+                    .includes(searchText)
+            );
+
+        }
+    );
 
 
     return (
@@ -174,7 +273,9 @@ const LeftSidebar = () => {
                         type="text"
                         placeholder='Search here..'
                         value={search}
-                        onChange={(e) => setSearch(e.target.value)}
+                        onChange={(e) =>
+                            setSearch(e.target.value)
+                        }
                     />
 
                 </div>
@@ -188,22 +289,27 @@ const LeftSidebar = () => {
 
                 {filteredUsers.map((user) => {
 
-                    const lastMessage = lastMessages[user.id];
+                    const lastMessage =
+                        lastMessages[user.id];
+
+                    const unreadCount =
+                        unreadCounts[user.id] || 0;
+
 
                     return (
 
                         <div
                             key={user.id}
 
-                            // Highlight selected user
                             className={`friends ${
                                 selectedUser?.id === user.id
                                     ? "selected"
                                     : ""
                             }`}
 
-                            // Open this user's chat
-                            onClick={() => setSelectedUser(user)}
+                            onClick={() =>
+                                setSelectedUser(user)
+                            }
                         >
 
                             <img
@@ -214,10 +320,12 @@ const LeftSidebar = () => {
                                 alt=""
                             />
 
-                            <div>
+
+                            <div className="friend-info">
 
                                 <p>
-                                    {user.name || user.username}
+                                    {user.name ||
+                                        user.username}
                                 </p>
 
                                 <span>
@@ -229,6 +337,19 @@ const LeftSidebar = () => {
                                 </span>
 
                             </div>
+
+
+                            {/* Unread count */}
+
+                            {unreadCount > 0 && (
+
+                                <div className="unread-count">
+
+                                    {unreadCount}
+
+                                </div>
+
+                            )}
 
                         </div>
 

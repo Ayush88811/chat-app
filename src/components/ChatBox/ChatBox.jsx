@@ -8,11 +8,14 @@ import {
     addDoc,
     collection,
     doc,
+    getDocs,
     onSnapshot,
     orderBy,
     query,
     serverTimestamp,
-    setDoc
+    setDoc,
+    updateDoc,
+    where
 } from 'firebase/firestore';
 
 import uploadImage from '../../lib/upload';
@@ -26,11 +29,11 @@ const ChatBox = () => {
     const [messages, setMessages] = useState([]);
     const [message, setMessage] = useState("");
 
-    // Used to scroll to the latest message
-    const messagesEndRef = useRef(null);
-
-    // Store selected user's latest data
+    // Selected user's latest profile data
     const [selectedUserData, setSelectedUserData] = useState(null);
+
+    // Used for auto-scroll
+    const messagesEndRef = useRef(null);
 
 
     // Listen for selected user's profile changes
@@ -85,7 +88,7 @@ const ChatBox = () => {
             orderBy("createdAt", "asc")
         );
 
-        // Listen for new messages in real time
+        // Listen for messages in real time
         const unsubscribe = onSnapshot(q, (snapshot) => {
 
             const messagesList = snapshot.docs.map((doc) => ({
@@ -97,13 +100,74 @@ const ChatBox = () => {
 
         });
 
-        // Remove listener when user changes
         return () => unsubscribe();
 
     }, [selectedUser]);
 
 
-    // Scroll to the latest message
+    // Mark received messages as read
+    useEffect(() => {
+
+        const markMessagesAsRead = async () => {
+
+            if (!selectedUser || !auth.currentUser) {
+                return;
+            }
+
+            const currentUserId = auth.currentUser.uid;
+            const selectedUserId = selectedUser.id;
+
+            const chatId = [currentUserId, selectedUserId]
+                .sort()
+                .join("_");
+
+            const messagesRef = collection(
+                db,
+                "chats",
+                chatId,
+                "messages"
+            );
+
+            // Find unread messages received by current user
+            const unreadQuery = query(
+                messagesRef,
+                where("receiverId", "==", currentUserId),
+                where("read", "==", false)
+            );
+
+            try {
+
+                const snapshot = await getDocs(unreadQuery);
+
+                // Mark each message as read
+                snapshot.docs.forEach(async (messageDoc) => {
+
+                    await updateDoc(
+                        messageDoc.ref,
+                        {
+                            read: true
+                        }
+                    );
+
+                });
+
+            } catch (error) {
+
+                console.error(
+                    "Error marking messages as read:",
+                    error
+                );
+
+            }
+
+        };
+
+        markMessagesAsRead();
+
+    }, [selectedUser]);
+
+
+    // Scroll to latest message
     useEffect(() => {
 
         messagesEndRef.current?.scrollIntoView({
@@ -122,7 +186,6 @@ const ChatBox = () => {
 
         const currentTime = Date.now();
 
-        // Consider user online if updated within last 2 minutes
         return (
             currentTime - selectedUserData.lastSeen <
             2 * 60 * 1000
@@ -177,18 +240,22 @@ const ChatBox = () => {
                 "messages"
             );
 
-            // Add message
+            // Add new text message
             await addDoc(messagesRef, {
 
                 senderId: currentUserId,
                 receiverId: selectedUserId,
                 text: message.trim(),
+
+                // Message is unread until receiver opens chat
+                read: false,
+
                 createdAt: serverTimestamp()
 
             });
 
 
-            // Save latest message for sidebar preview
+            // Update latest message
             await setDoc(
                 doc(db, "chats", chatId),
                 {
@@ -207,13 +274,16 @@ const ChatBox = () => {
 
         } catch (error) {
 
-            console.error("Error sending message:", error);
+            console.error(
+                "Error sending message:",
+                error
+            );
 
         }
     };
 
 
-    // Send image message through Cloudinary
+    // Send image through Cloudinary
     const sendImage = async (file) => {
 
         if (!file || !selectedUser) {
@@ -246,12 +316,16 @@ const ChatBox = () => {
                 receiverId: selectedUserId,
                 text: "",
                 image: imageUrl,
+
+                // Image message is also unread
+                read: false,
+
                 createdAt: serverTimestamp()
 
             });
 
 
-            // Save image as latest message
+            // Update latest message
             await setDoc(
                 doc(db, "chats", chatId),
                 {
@@ -266,7 +340,10 @@ const ChatBox = () => {
 
         } catch (error) {
 
-            console.error("Error sending image:", error);
+            console.error(
+                "Error sending image:",
+                error
+            );
 
         }
     };
@@ -284,7 +361,7 @@ const ChatBox = () => {
     };
 
 
-    // Send message when Enter is pressed
+    // Send message with Enter
     const handleKeyDown = (e) => {
 
         if (e.key === "Enter") {
@@ -294,7 +371,7 @@ const ChatBox = () => {
     };
 
 
-    // Convert Firebase timestamp to readable time
+    // Format message time
     const formatTime = (timestamp) => {
 
         if (!timestamp?.toDate) {
@@ -337,6 +414,7 @@ const ChatBox = () => {
                     </p>
 
                     {selectedUser && (
+
                         <div className="user-status">
 
                             {isUserOnline() && (
@@ -348,6 +426,7 @@ const ChatBox = () => {
                             </span>
 
                         </div>
+
                     )}
 
                 </div>
@@ -381,11 +460,12 @@ const ChatBox = () => {
 
                     messages.map((msg) => {
 
-                        // Check whether message was sent by current user
+                        // Check sender
                         const isSender =
                             msg.senderId === auth.currentUser.uid;
 
                         return (
+
                             <div
                                 key={msg.id}
                                 className={
@@ -395,7 +475,8 @@ const ChatBox = () => {
                                 }
                             >
 
-                                {/* Show image or text */}
+                                {/* Message text or image */}
+
                                 {msg.image ? (
 
                                     <img
@@ -412,7 +493,8 @@ const ChatBox = () => {
 
                                 )}
 
-                                {/* Avatar and message time */}
+
+                                {/* Avatar + time + read status */}
 
                                 <div className="msg-info">
 
@@ -436,16 +518,31 @@ const ChatBox = () => {
                                         {formatTime(msg.createdAt)}
                                     </p>
 
+                                    {/* Read status only for sent messages */}
+
+                                    {isSender && (
+                                        <span
+                                            className={
+                                                msg.read
+                                                    ? "read-status read"
+                                                    : "read-status"
+                                            }
+                                        >
+                                            {msg.read ? "✓✓" : "✓"}
+                                        </span>
+                                    )}
+
                                 </div>
 
                             </div>
+
                         );
 
                     })
 
                 )}
 
-                {/* Keeps chat at latest message */}
+                {/* Auto-scroll target */}
                 <div ref={messagesEndRef}></div>
 
             </div>
@@ -464,6 +561,7 @@ const ChatBox = () => {
                 />
 
                 {/* Image input */}
+
                 <input
                     type="file"
                     id="image"
@@ -482,6 +580,7 @@ const ChatBox = () => {
                 </label>
 
                 {/* Send button */}
+
                 <img
                     src={assets.send_button}
                     alt="send"

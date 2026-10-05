@@ -498,3 +498,13 @@
     display: inline-block;
     flex-shrink: 0;
 }
+
+.read-status {
+    font-size: 10px;
+    color: #777;
+    margin-left: 2px;
+}
+
+.read-status.read {
+    color: #2196f3;
+}
