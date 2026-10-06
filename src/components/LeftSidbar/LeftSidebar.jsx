@@ -5,10 +5,13 @@ import { auth, db, logout } from '../../config/firebase';
 
 import {
     collection,
+    getDoc,
     getDocs,
     onSnapshot,
     orderBy,
-    query
+    query,
+    updateDoc,
+    doc
 } from 'firebase/firestore';
 
 import { AppContext } from '../../context/AppContext';
@@ -44,9 +47,9 @@ const LeftSidebar = () => {
             const snapshot = await getDocs(userRef);
 
             const usersList = snapshot.docs
-                .map((doc) => ({
-                    ...doc.data(),
-                    id: doc.id
+                .map((userDoc) => ({
+                    ...userDoc.data(),
+                    id: userDoc.id
                 }))
                 .filter(
                     (user) =>
@@ -75,6 +78,93 @@ const LeftSidebar = () => {
     }, []);
 
 
+    // Add participants to old chat documents
+    useEffect(() => {
+
+        if (!auth.currentUser || users.length === 0) {
+            return;
+        }
+
+        const migrateOldChats = async () => {
+
+            try {
+
+                const currentUserId =
+                    auth.currentUser.uid;
+
+
+                for (const user of users) {
+
+                    const selectedUserId =
+                        user.id;
+
+
+                    // Same chat id used by the app
+                    const chatId = [
+                        currentUserId,
+                        selectedUserId
+                    ]
+                        .sort()
+                        .join("_");
+
+
+                    const chatRef = doc(
+                        db,
+                        "chats",
+                        chatId
+                    );
+
+
+                    // Check if chat already exists
+                    const chatSnap =
+                        await getDoc(chatRef);
+
+
+                    if (chatSnap.exists()) {
+
+                        const chatData =
+                            chatSnap.data();
+
+
+                        // Add participants only
+                        // if they are missing
+                        if (
+                            !chatData.participants
+                        ) {
+
+                            await updateDoc(
+                                chatRef,
+                                {
+                                    participants: [
+                                        currentUserId,
+                                        selectedUserId
+                                    ]
+                                }
+                            );
+
+                        }
+
+                    }
+
+                }
+
+            } catch (error) {
+
+                console.error(
+                    "Error migrating old chats:",
+                    error
+                );
+
+            }
+
+        };
+
+
+        migrateOldChats();
+
+    }, [users]);
+
+
     // Listen for latest message and unread messages
     useEffect(() => {
 
@@ -90,7 +180,8 @@ const LeftSidebar = () => {
 
         users.forEach((user) => {
 
-            const selectedUserId = user.id;
+            const selectedUserId =
+                user.id;
 
 
             // Same chat id for both users
@@ -110,7 +201,7 @@ const LeftSidebar = () => {
             );
 
 
-            // Get all messages ordered by time
+            // Get messages ordered by time
             const q = query(
                 messagesRef,
                 orderBy("createdAt", "desc")
@@ -121,13 +212,13 @@ const LeftSidebar = () => {
                 q,
                 (snapshot) => {
 
-                    // Convert messages into array
-                    const messages = snapshot.docs.map(
-                        (messageDoc) => ({
-                            id: messageDoc.id,
-                            ...messageDoc.data()
-                        })
-                    );
+                    const messages =
+                        snapshot.docs.map(
+                            (messageDoc) => ({
+                                id: messageDoc.id,
+                                ...messageDoc.data()
+                            })
+                        );
 
 
                     // No messages
@@ -159,8 +250,7 @@ const LeftSidebar = () => {
                     }));
 
 
-                    // Count messages received by current user
-                    // which are still unread
+                    // Count unread messages
                     const unreadCount =
                         messages.filter(
                             (msg) =>
