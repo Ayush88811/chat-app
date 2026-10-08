@@ -1,33 +1,31 @@
 import React, { useContext, useEffect, useState } from 'react'
-import './LeftSidebar.css';
-import assets from '../../assets/assets';
-import { auth, db, logout } from '../../config/firebase';
+import './LeftSidebar.css'
+import assets from '../../assets/assets'
+import { auth, db, logout } from '../../config/firebase'
 
 import {
     collection,
-    getDoc,
     getDocs,
     onSnapshot,
     orderBy,
-    query,
-    updateDoc,
-    doc
-} from 'firebase/firestore';
+    query
+} from 'firebase/firestore'
 
-import { AppContext } from '../../context/AppContext';
-import { useNavigate } from 'react-router-dom';
+import { AppContext } from '../../context/AppContext'
+import { useNavigate } from 'react-router-dom'
 
 
-const LeftSidebar = () => {
+const LeftSidebar = ({ onUserSelect }) => {
 
     const [users, setUsers] = useState([]);
     const [search, setSearch] = useState("");
 
-    // Store latest message of every chat
+    // Latest message of every chat
     const [lastMessages, setLastMessages] = useState({});
 
-    // Store unread count of every chat
+    // Unread messages of every chat
     const [unreadCounts, setUnreadCounts] = useState({});
+
 
     const {
         selectedUser,
@@ -47,9 +45,9 @@ const LeftSidebar = () => {
             const snapshot = await getDocs(userRef);
 
             const usersList = snapshot.docs
-                .map((userDoc) => ({
-                    ...userDoc.data(),
-                    id: userDoc.id
+                .map((doc) => ({
+                    ...doc.data(),
+                    id: doc.id
                 }))
                 .filter(
                     (user) =>
@@ -70,7 +68,7 @@ const LeftSidebar = () => {
     };
 
 
-    // Load users when sidebar opens
+    // Load users
     useEffect(() => {
 
         fetchUsers();
@@ -78,99 +76,16 @@ const LeftSidebar = () => {
     }, []);
 
 
-    // Add participants to old chat documents
+    // Listen to latest message + unread messages
     useEffect(() => {
 
-        if (!auth.currentUser || users.length === 0) {
+        if (
+            !auth.currentUser ||
+            users.length === 0
+        ) {
             return;
         }
 
-        const migrateOldChats = async () => {
-
-            try {
-
-                const currentUserId =
-                    auth.currentUser.uid;
-
-
-                for (const user of users) {
-
-                    const selectedUserId =
-                        user.id;
-
-
-                    // Same chat id used by the app
-                    const chatId = [
-                        currentUserId,
-                        selectedUserId
-                    ]
-                        .sort()
-                        .join("_");
-
-
-                    const chatRef = doc(
-                        db,
-                        "chats",
-                        chatId
-                    );
-
-
-                    // Check if chat already exists
-                    const chatSnap =
-                        await getDoc(chatRef);
-
-
-                    if (chatSnap.exists()) {
-
-                        const chatData =
-                            chatSnap.data();
-
-
-                        // Add participants only
-                        // if they are missing
-                        if (
-                            !chatData.participants
-                        ) {
-
-                            await updateDoc(
-                                chatRef,
-                                {
-                                    participants: [
-                                        currentUserId,
-                                        selectedUserId
-                                    ]
-                                }
-                            );
-
-                        }
-
-                    }
-
-                }
-
-            } catch (error) {
-
-                console.error(
-                    "Error migrating old chats:",
-                    error
-                );
-
-            }
-
-        };
-
-
-        migrateOldChats();
-
-    }, [users]);
-
-
-    // Listen for latest message and unread messages
-    useEffect(() => {
-
-        if (!auth.currentUser || users.length === 0) {
-            return;
-        }
 
         const unsubscribeFunctions = [];
 
@@ -201,7 +116,7 @@ const LeftSidebar = () => {
             );
 
 
-            // Get messages ordered by time
+            // Get latest message
             const q = query(
                 messagesRef,
                 orderBy("createdAt", "desc")
@@ -212,17 +127,7 @@ const LeftSidebar = () => {
                 q,
                 (snapshot) => {
 
-                    const messages =
-                        snapshot.docs.map(
-                            (messageDoc) => ({
-                                id: messageDoc.id,
-                                ...messageDoc.data()
-                            })
-                        );
-
-
-                    // No messages
-                    if (messages.length === 0) {
+                    if (snapshot.empty) {
 
                         setLastMessages((prev) => ({
                             ...prev,
@@ -239,6 +144,15 @@ const LeftSidebar = () => {
                     }
 
 
+                    const messages =
+                        snapshot.docs.map(
+                            (messageDoc) => ({
+                                id: messageDoc.id,
+                                ...messageDoc.data()
+                            })
+                        );
+
+
                     // Latest message
                     const latestMessage =
                         messages[0];
@@ -250,7 +164,7 @@ const LeftSidebar = () => {
                     }));
 
 
-                    // Count unread messages
+                    // Count unread received messages
                     const unreadCount =
                         messages.filter(
                             (msg) =>
@@ -284,11 +198,11 @@ const LeftSidebar = () => {
         });
 
 
-        // Remove listeners
         return () => {
 
             unsubscribeFunctions.forEach(
-                (unsubscribe) => unsubscribe()
+                (unsubscribe) =>
+                    unsubscribe()
             );
 
         };
@@ -338,7 +252,7 @@ const LeftSidebar = () => {
     };
 
 
-    // Show message preview
+    // Message preview
     const getMessagePreview = (message) => {
 
         if (!message) {
@@ -350,6 +264,20 @@ const LeftSidebar = () => {
         }
 
         return message.text || "";
+
+    };
+
+
+    // Select user
+    const handleUserClick = (user) => {
+
+        setSelectedUser(user);
+
+
+        // Open selected chat on mobile
+        if (onUserSelect) {
+            onUserSelect();
+        }
 
     };
 
@@ -388,6 +316,7 @@ const LeftSidebar = () => {
     return (
         <div className='ls'>
 
+
             <div className="ls-top">
 
                 <div className="ls-nav">
@@ -398,12 +327,14 @@ const LeftSidebar = () => {
                         alt=""
                     />
 
+
                     <div className='menu'>
 
                         <img
                             src={assets.menu_icon}
                             alt=""
                         />
+
 
                         <div className="sub-menu">
 
@@ -415,7 +346,9 @@ const LeftSidebar = () => {
                                 Edit Profile
                             </p>
 
+
                             <hr />
+
 
                             <p
                                 onClick={
@@ -441,9 +374,10 @@ const LeftSidebar = () => {
                         alt=""
                     />
 
+
                     <input
                         type="text"
-                        placeholder='Search here..'
+                        placeholder="Search here.."
                         value={search}
                         onChange={(e) =>
                             setSearch(
@@ -457,7 +391,7 @@ const LeftSidebar = () => {
             </div>
 
 
-            {/* User list */}
+            {/* Users */}
 
             <div className="ls-list">
 
@@ -475,16 +409,20 @@ const LeftSidebar = () => {
                         <div
                             key={user.id}
 
-                            className={`friends ${
-                                selectedUser?.id === user.id
-                                    ? "selected"
-                                    : ""
-                            }`}
+                            className={
+                                `friends ${
+                                    selectedUser?.id ===
+                                    user.id
+                                        ? "selected"
+                                        : ""
+                                }`
+                            }
 
                             onClick={() =>
-                                setSelectedUser(user)
+                                handleUserClick(user)
                             }
                         >
+
 
                             <img
                                 src={
@@ -497,25 +435,34 @@ const LeftSidebar = () => {
 
                             <div className="friend-info">
 
+
                                 <div className="friend-name-row">
 
                                     <p>
-                                        {user.name ||
-                                            user.username}
+                                        {
+                                            user.name ||
+                                            user.username ||
+                                            user.email
+                                        }
                                     </p>
 
+
                                     {lastMessage && (
+
                                         <span className="last-time">
-                                            {formatTime(
-                                                lastMessage.createdAt
-                                            )}
+                                            {
+                                                formatTime(
+                                                    lastMessage.createdAt
+                                                )
+                                            }
                                         </span>
+
                                     )}
 
                                 </div>
 
 
-                                <div className="friend-message-row">
+                                <div className="friend-bottom">
 
                                     <span className="last-message">
 
@@ -531,12 +478,15 @@ const LeftSidebar = () => {
                                     {/* Unread count */}
 
                                     {unreadCount > 0 && (
+
                                         <span className="unread-count">
                                             {unreadCount}
                                         </span>
+
                                     )}
 
                                 </div>
+
 
                             </div>
 
@@ -552,4 +502,4 @@ const LeftSidebar = () => {
     )
 }
 
-export default LeftSidebar;
+export default LeftSidebar

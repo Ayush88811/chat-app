@@ -24,6 +24,7 @@ const ChatBox = () => {
 
     const {
         selectedUser,
+        setSelectedUser,
         userData
     } = useContext(AppContext);
 
@@ -33,7 +34,7 @@ const ChatBox = () => {
     // Selected user's latest profile data
     const [selectedUserData, setSelectedUserData] = useState(null);
 
-    // Edit message
+    // Edit message states
     const [editingMessageId, setEditingMessageId] = useState(null);
     const [editText, setEditText] = useState("");
 
@@ -66,14 +67,6 @@ const ChatBox = () => {
                     setSelectedUserData(snapshot.data());
                 }
 
-            },
-            (error) => {
-
-                console.error(
-                    "Error loading selected user:",
-                    error
-                );
-
             }
         );
 
@@ -82,23 +75,13 @@ const ChatBox = () => {
     }, [selectedUser?.id]);
 
 
-    // Load messages whenever selected user changes
+    // Get messages in real time
     useEffect(() => {
 
-        // Clear previous user's messages
-        setMessages([]);
-
-        setMenuMessageId(null);
-        setEditingMessageId(null);
-        setEditText("");
-
-        if (
-            !selectedUser?.id ||
-            !auth.currentUser?.uid
-        ) {
+        if (!selectedUser || !auth.currentUser) {
+            setMessages([]);
             return;
         }
-
 
         const currentUserId =
             auth.currentUser.uid;
@@ -124,14 +107,14 @@ const ChatBox = () => {
         );
 
 
-        // Get messages in old-to-new order
+        // Get old messages first
         const q = query(
             messagesRef,
             orderBy("createdAt", "asc")
         );
 
 
-        // Listen for messages
+        // Listen for new messages
         const unsubscribe = onSnapshot(
             q,
             (snapshot) => {
@@ -146,7 +129,7 @@ const ChatBox = () => {
                 setMessages(messagesList);
 
 
-                // Mark received messages as read
+                // Mark received unread messages as read
                 messagesList.forEach(async (msg) => {
 
                     if (
@@ -190,18 +173,13 @@ const ChatBox = () => {
                     error
                 );
 
-                setMessages([]);
-
             }
         );
 
 
-        // Remove old listener
-        return () => {
-            unsubscribe();
-        };
+        return () => unsubscribe();
 
-    }, [selectedUser?.id]);
+    }, [selectedUser]);
 
 
     // Scroll to latest message
@@ -256,11 +234,7 @@ const ChatBox = () => {
     // Send text message
     const sendMessage = async () => {
 
-        if (
-            !message.trim() ||
-            !selectedUser?.id ||
-            !auth.currentUser
-        ) {
+        if (!message.trim() || !selectedUser) {
             return;
         }
 
@@ -273,7 +247,6 @@ const ChatBox = () => {
                 selectedUser.id;
 
 
-            // Create unique chat id
             const chatId = [
                 currentUserId,
                 selectedUserId
@@ -282,31 +255,6 @@ const ChatBox = () => {
                 .join("_");
 
 
-            // Reference of chat document
-            const chatRef = doc(
-                db,
-                "chats",
-                chatId
-            );
-
-
-            // Create chat document first
-            // This is important for new users
-            await setDoc(
-                chatRef,
-                {
-                    participants: [
-                        currentUserId,
-                        selectedUserId
-                    ]
-                },
-                {
-                    merge: true
-                }
-            );
-
-
-            // Reference of messages collection
             const messagesRef = collection(
                 db,
                 "chats",
@@ -316,27 +264,28 @@ const ChatBox = () => {
 
 
             // Add new message
-            await addDoc(
-                messagesRef,
-                {
-                    senderId: currentUserId,
-                    receiverId: selectedUserId,
-                    text: message.trim(),
-                    read: false,
-                    createdAt: serverTimestamp()
-                }
-            );
+            await addDoc(messagesRef, {
+
+                senderId: currentUserId,
+                receiverId: selectedUserId,
+                text: message.trim(),
+
+                // Receiver has not read it yet
+                read: false,
+
+                createdAt: serverTimestamp()
+
+            });
 
 
             // Update latest message
             await setDoc(
-                chatRef,
+                doc(
+                    db,
+                    "chats",
+                    chatId
+                ),
                 {
-                    participants: [
-                        currentUserId,
-                        selectedUserId
-                    ],
-
                     lastMessage: {
                         text: message.trim(),
                         senderId: currentUserId,
@@ -351,7 +300,6 @@ const ChatBox = () => {
 
             // Clear input
             setMessage("");
-
 
         } catch (error) {
 
@@ -368,11 +316,7 @@ const ChatBox = () => {
     // Send image through Cloudinary
     const sendImage = async (file) => {
 
-        if (
-            !file ||
-            !selectedUser?.id ||
-            !auth.currentUser
-        ) {
+        if (!file || !selectedUser) {
             return;
         }
 
@@ -385,7 +329,11 @@ const ChatBox = () => {
                 selectedUser.id;
 
 
-            // Create unique chat id
+            // Upload image to Cloudinary
+            const imageUrl =
+                await uploadImage(file);
+
+
             const chatId = [
                 currentUserId,
                 selectedUserId
@@ -394,35 +342,6 @@ const ChatBox = () => {
                 .join("_");
 
 
-            // Reference of chat document
-            const chatRef = doc(
-                db,
-                "chats",
-                chatId
-            );
-
-
-            // Create chat document first
-            await setDoc(
-                chatRef,
-                {
-                    participants: [
-                        currentUserId,
-                        selectedUserId
-                    ]
-                },
-                {
-                    merge: true
-                }
-            );
-
-
-            // Upload image to Cloudinary
-            const imageUrl =
-                await uploadImage(file);
-
-
-            // Messages collection
             const messagesRef = collection(
                 db,
                 "chats",
@@ -432,22 +351,28 @@ const ChatBox = () => {
 
 
             // Add image message
-            await addDoc(
-                messagesRef,
-                {
-                    senderId: currentUserId,
-                    receiverId: selectedUserId,
-                    text: "",
-                    image: imageUrl,
-                    read: false,
-                    createdAt: serverTimestamp()
-                }
-            );
+            await addDoc(messagesRef, {
+
+                senderId: currentUserId,
+                receiverId: selectedUserId,
+                text: "",
+                image: imageUrl,
+
+                // Receiver has not read it yet
+                read: false,
+
+                createdAt: serverTimestamp()
+
+            });
 
 
             // Update latest message
             await setDoc(
-                chatRef,
+                doc(
+                    db,
+                    "chats",
+                    chatId
+                ),
                 {
                     lastMessage: {
                         text: "📷 Image",
@@ -459,7 +384,6 @@ const ChatBox = () => {
                     merge: true
                 }
             );
-
 
         } catch (error) {
 
@@ -476,8 +400,7 @@ const ChatBox = () => {
     // Handle image selection
     const handleImageChange = (e) => {
 
-        const file =
-            e.target.files[0];
+        const file = e.target.files[0];
 
         if (file) {
             sendImage(file);
@@ -491,6 +414,7 @@ const ChatBox = () => {
 
         setEditingMessageId(msg.id);
         setEditText(msg.text || "");
+
         setMenuMessageId(null);
 
     };
@@ -511,8 +435,7 @@ const ChatBox = () => {
         if (
             !editText.trim() ||
             !editingMessageId ||
-            !selectedUser ||
-            !auth.currentUser
+            !selectedUser
         ) {
             return;
         }
@@ -542,7 +465,7 @@ const ChatBox = () => {
             );
 
 
-            // Update last message if it is latest
+            // Update last message if this is the latest
             const latestMessage =
                 messages[messages.length - 1];
 
@@ -592,10 +515,7 @@ const ChatBox = () => {
     // Delete message
     const deleteMessage = async (messageId) => {
 
-        if (
-            !selectedUser ||
-            !auth.currentUser
-        ) {
+        if (!selectedUser) {
             return;
         }
 
@@ -641,8 +561,7 @@ const ChatBox = () => {
 
             if (editingMessageId) {
                 saveEdit();
-            }
-            else {
+            } else {
                 sendMessage();
             }
 
@@ -669,13 +588,24 @@ const ChatBox = () => {
 
 
     return (
-
         <div className='chat-box'>
 
 
             {/* Chat header */}
 
             <div className="chat-user">
+
+                {/* Mobile back button */}
+
+                <button
+                    className="mobile-back"
+                    onClick={() =>
+                        setSelectedUser(null)
+                    }
+                >
+                    ←
+                </button>
+
 
                 <img
                     src={
@@ -761,7 +691,6 @@ const ChatBox = () => {
                                 }
                             >
 
-
                                 {/* Edit mode */}
 
                                 {editingMessageId === msg.id ? (
@@ -809,7 +738,7 @@ const ChatBox = () => {
 
                                     <>
 
-                                        {/* Show image or text */}
+                                        {/* Image or text */}
 
                                         {msg.image ? (
 
@@ -862,7 +791,6 @@ const ChatBox = () => {
 
                                                     <div className="message-menu">
 
-                                                        {/* Image cannot be edited */}
                                                         {!msg.image && (
 
                                                             <button
@@ -901,7 +829,7 @@ const ChatBox = () => {
                                 )}
 
 
-                                {/* Message information */}
+                                {/* Avatar + time + read status */}
 
                                 <div className="msg-info">
 
@@ -957,8 +885,6 @@ const ChatBox = () => {
 
                 )}
 
-
-                {/* Auto scroll */}
 
                 <div ref={messagesEndRef}></div>
 
@@ -1016,4 +942,4 @@ const ChatBox = () => {
     )
 }
 
-export default ChatBox;
+export default ChatBox

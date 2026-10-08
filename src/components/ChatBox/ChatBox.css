@@ -1,367 +1,408 @@
 /* ============================================================
    MAIN CHAT BOX
-   ============================================================ */
+============================================================ */
 
 .chat-box {
-
     height: 75vh;
-
     background: #f1f5ff;
-
     display: flex;
-
     flex-direction: column;
-
+    min-width: 0;
 }
 
 
 /* ============================================================
    CHAT HEADER
-   ============================================================ */
+============================================================ */
 
 .chat-user {
-
     height: 48px;
-
-    padding: 0px 15px;
-
+    min-height: 48px;
+    padding: 0 15px;
     background: #f1f5ff;
-
     border-bottom: 1px solid #d5d5d5;
 
     display: flex;
-
     align-items: center;
-
     gap: 10px;
-
 }
 
 
-/* Selected user's profile image */
+/* Profile image */
 
-.chat-user > img:first-child {
-
+.chat-user > img:first-of-type {
     width: 32px;
-
     height: 32px;
-
     border-radius: 50%;
-
     object-fit: cover;
-
+    flex-shrink: 0;
 }
 
 
-/* Selected user's name */
+/* User name */
+
+.chat-user-name {
+    min-width: 0;
+    flex: 1;
+}
+
 
 .chat-user p {
-
-    flex: 1;
-
     margin: 0;
-
     font-size: 16px;
-
     color: #111;
 
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+
+/* User status */
+
+.user-status {
     display: flex;
-
     align-items: center;
-
     gap: 5px;
 
+    font-size: 10px;
+    color: #777;
 }
 
 
-/* Green online dot */
-
-.chat-user .dot {
-
+.online-dot {
     width: 7px;
-
     height: 7px;
-
+    background: #4cd137;
+    border-radius: 50%;
+    display: inline-block;
+    flex-shrink: 0;
 }
 
 
-/* Info icon */
+/* Help icon */
 
 .chat-user .help {
-
     width: 20px;
-
     height: 20px;
-
     cursor: pointer;
+    flex-shrink: 0;
+}
 
+
+/* Mobile back button */
+
+.mobile-back {
+    display: none;
+
+    border: none;
+    background: transparent;
+
+    font-size: 24px;
+    cursor: pointer;
+    color: #111;
+
+    padding: 0;
 }
 
 
 /* ============================================================
    MESSAGE AREA
-   ============================================================ */
-
-/*
-   IMPORTANT CHANGE:
-
-   Pehle fixed height ki wajah se messages ka layout
-   properly adjust nahi ho raha tha.
-
-   Ab flex: 1 use kiya hai.
-
-   Iska benefit:
-   Header + Input apni jagah rahenge
-   aur beech ka remaining area messages ke liye milega.
-*/
+============================================================ */
 
 .chat-msg {
-
     flex: 1;
+    min-height: 0;
 
     padding: 20px;
 
     overflow-y: auto;
 
     display: flex;
-
     flex-direction: column;
-
     gap: 12px;
-
 }
 
 
 /* ============================================================
-   CURRENT USER MESSAGE
-   ============================================================ */
-
-/*
-   Current user ka message RIGHT side me jayega.
-*/
+   SENDER MESSAGE
+============================================================ */
 
 .s-msg {
-
     max-width: 70%;
 
     align-self: flex-end;
 
     display: flex;
-
     flex-direction: column;
-
     align-items: flex-end;
+}
 
+
+.s-msg .msg {
+    background: #077eff;
+    color: white;
+
+    padding: 9px 13px;
+    margin: 0;
+
+    border-radius: 12px 12px 3px 12px;
+
+    font-size: 12px;
+    line-height: 1.4;
+
+    max-width: 100%;
+
+    word-break: break-word;
 }
 
 
 /* ============================================================
    RECEIVER MESSAGE
-   ============================================================ */
-
-/*
-   Dusre user ka message LEFT side me jayega.
-*/
+============================================================ */
 
 .r-msg {
-
     max-width: 70%;
 
     align-self: flex-start;
 
     display: flex;
-
     flex-direction: column;
-
     align-items: flex-start;
-
 }
 
-
-/* ============================================================
-   CURRENT USER BUBBLE
-   ============================================================ */
-
-/*
-   Sender/current user = BLUE
-
-   WhatsApp-style right side bubble.
-*/
-
-.s-msg .msg {
-
-    background: #077eff;
-
-    color: white;
-
-    padding: 9px 13px;
-
-    margin: 0;
-
-    border-radius: 12px 12px 3px 12px;
-
-    font-size: 12px;
-
-    line-height: 1.4;
-
-    max-width: 100%;
-
-    word-break: break-word;
-
-}
-
-
-/* ============================================================
-   RECEIVER BUBBLE
-   ============================================================ */
-
-/*
-   Receiver = WHITE
-
-   Isse sender aur receiver clearly different
-   dikhte hain.
-*/
 
 .r-msg .msg {
-
     background: white;
-
     color: #333;
 
     padding: 9px 13px;
-
     margin: 0;
 
     border-radius: 12px 12px 12px 3px;
 
     font-size: 12px;
-
     line-height: 1.4;
 
     max-width: 100%;
 
     word-break: break-word;
-
 }
 
 
 /* ============================================================
    MESSAGE IMAGE
-   ============================================================ */
-
-/*
-   Agar message text ki jagah image hai,
-   to ye CSS apply hogi.
-*/
+============================================================ */
 
 .msg-img {
-
-    max-width: 230px;
-
-    max-height: 230px;
+    display: block;
 
     width: auto;
-
     height: auto;
+
+    max-width: 230px;
+    max-height: 230px;
 
     object-fit: cover;
 
     border-radius: 10px;
-
-    display: block;
-
 }
 
-
-/*
-   Sender ki image ke corners
-   thode WhatsApp-style rakhe hain.
-*/
 
 .s-msg .msg-img {
-
     border-radius: 12px 12px 3px 12px;
-
 }
 
 
-/*
-   Receiver ki image ke corners
-*/
-
 .r-msg .msg-img {
-
     border-radius: 12px 12px 12px 3px;
-
 }
 
 
 /* ============================================================
-   AVATAR + TIME
-   ============================================================ */
+   MESSAGE INFO
+============================================================ */
 
 .msg-info {
-
     display: flex;
-
     align-items: center;
 
     gap: 5px;
 
     margin-top: 4px;
-
 }
 
 
-/* Message ke neeche avatar */
-
 .msg-info img {
-
     width: 22px;
-
     height: 22px;
 
     border-radius: 50%;
 
     object-fit: cover;
-
 }
 
 
-/* Message time */
-
 .msg-info p {
-
     margin: 0;
 
     font-size: 8px;
-
     color: #777;
+}
 
+
+/* Read receipt */
+
+.read-status {
+    font-size: 10px;
+    color: #777;
+    margin-left: 2px;
+}
+
+
+.read-status.read {
+    color: #2196f3;
 }
 
 
 /* ============================================================
-   NO MESSAGE TEXT
-   ============================================================ */
+   NO MESSAGE
+============================================================ */
 
 .no-message {
-
     margin: auto;
 
     color: #777;
 
     font-size: 13px;
+}
 
+
+/* ============================================================
+   MESSAGE MENU
+============================================================ */
+
+.message-options {
+    position: relative;
+    display: inline-block;
+}
+
+
+.more-btn {
+    border: none;
+    background: transparent;
+
+    cursor: pointer;
+
+    font-size: 18px;
+    color: #777;
+
+    padding: 2px 5px;
+}
+
+
+.message-menu {
+    position: absolute;
+
+    right: 0;
+    bottom: 25px;
+
+    background: white;
+
+    border-radius: 6px;
+
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.15);
+
+    overflow: hidden;
+
+    z-index: 10;
+}
+
+
+.message-menu button {
+    display: block;
+
+    width: 80px;
+
+    padding: 8px 10px;
+
+    border: none;
+
+    background: white;
+
+    cursor: pointer;
+
+    text-align: left;
+
+    font-size: 12px;
+}
+
+
+.message-menu button:hover {
+    background: #f1f1f1;
+}
+
+
+/* ============================================================
+   EDIT MESSAGE
+============================================================ */
+
+.edited-text {
+    font-size: 9px;
+    color: #888;
+    margin-left: 3px;
+}
+
+
+.edit-box {
+    background: white;
+
+    padding: 8px;
+
+    border-radius: 8px;
+}
+
+
+.edit-box input {
+    width: 180px;
+
+    border: 1px solid #ddd;
+
+    outline: none;
+
+    padding: 6px;
+
+    border-radius: 5px;
+}
+
+
+.edit-buttons {
+    display: flex;
+
+    gap: 5px;
+
+    margin-top: 5px;
+}
+
+
+.edit-buttons button {
+    border: none;
+
+    padding: 4px 8px;
+
+    border-radius: 4px;
+
+    cursor: pointer;
+
+    font-size: 10px;
 }
 
 
 /* ============================================================
    MESSAGE INPUT
-   ============================================================ */
+============================================================ */
 
 .chat-input {
-
     min-height: 60px;
 
     background: white;
@@ -372,18 +413,16 @@
 
     align-items: center;
 
-    padding: 0px 10px;
+    padding: 0 10px;
 
     gap: 10px;
-
 }
 
 
-/* Text input */
-
 .chat-input input[type="text"] {
-
     flex: 1;
+
+    min-width: 0;
 
     border: none;
 
@@ -392,192 +431,193 @@
     font-size: 13px;
 
     color: #333;
-
 }
 
-
-/* Placeholder */
 
 .chat-input input[type="text"]::placeholder {
-
     color: #888;
-
 }
 
 
-/* Gallery icon */
-
 .chat-input label img {
-
     width: 22px;
-
     height: 22px;
 
     cursor: pointer;
 
     opacity: 0.7;
-
 }
 
 
-/* Send button */
-
 .chat-input .send-button {
-
     width: 28px;
-
     height: 28px;
 
     cursor: pointer;
 
+    flex-shrink: 0;
 }
 
 
 /* ============================================================
    SCROLLBAR
-   ============================================================ */
+============================================================ */
 
 .chat-msg::-webkit-scrollbar {
-
     width: 5px;
-
 }
+
 
 .chat-msg::-webkit-scrollbar-thumb {
-
     background: #c5c5c5;
-
     border-radius: 10px;
-
 }
+
 
 .chat-msg::-webkit-scrollbar-track {
-
     background: transparent;
-
 }
 
-.online-dot {
-    width: 8px;
-    height: 8px;
-    background: #4cd137;
-    border-radius: 50%;
-    display: inline-block;
-    flex-shrink: 0;
-}
 
-.chat-user .dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    object-fit: cover;
-    display: block;
-}
-.online-dot {
-    width: 8px;
-    height: 8px;
-    background: #4cd137;
-    border-radius: 50%;
-    display: inline-block;
-    flex-shrink: 0;
-}
+/* ============================================================
+   MOBILE RESPONSIVE
+============================================================ */
 
-.user-status {
-    display: flex;
-    align-items: center;
-    gap: 5px;
-    font-size: 10px;
-    color: #777;
-}
+@media (max-width: 768px) {
 
-.online-dot {
-    width: 7px;
-    height: 7px;
-    background: #4cd137;
-    border-radius: 50%;
-    display: inline-block;
-    flex-shrink: 0;
-}
+    .chat-box {
+        height: 100dvh;
+        width: 100%;
+    }
 
-.read-status {
-    font-size: 10px;
-    color: #777;
-    margin-left: 2px;
-}
 
-.read-status.read {
-    color: #2196f3;
-}
-.message-options {
-    position: relative;
-    display: inline-block;
-}
+    /* Header */
 
-.more-btn {
-    border: none;
-    background: transparent;
-    cursor: pointer;
-    font-size: 18px;
-    color: #777;
-    padding: 2px 5px;
-}
+    .chat-user {
+        height: 65px;
+        min-height: 65px;
+        padding: 0 15px;
+    }
 
-.message-menu {
-    position: absolute;
-    right: 0;
-    bottom: 25px;
-    background: white;
-    border-radius: 6px;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.15);
-    overflow: hidden;
-    z-index: 10;
-}
 
-.message-menu button {
-    display: block;
-    width: 80px;
-    padding: 8px 10px;
-    border: none;
-    background: white;
-    cursor: pointer;
-    text-align: left;
-    font-size: 12px;
-}
+    .mobile-back {
+        display: block;
 
-.message-menu button:hover {
-    background: #f1f1f1;
-}
+        border: none;
+        background: transparent;
 
-.edited-text {
-    font-size: 9px;
-    color: #888;
-    margin-left: 3px;
-}
+        font-size: 24px;
+        color: #333;
 
-.edit-box {
-    background: white;
-    padding: 8px;
-    border-radius: 8px;
-}
+        cursor: pointer;
 
-.edit-box input {
-    width: 180px;
-    border: 1px solid #ddd;
-    outline: none;
-    padding: 6px;
-    border-radius: 5px;
-}
+        padding: 0;
+        margin-right: 2px;
+    }
 
-.edit-buttons {
-    display: flex;
-    gap: 5px;
-    margin-top: 5px;
-}
 
-.edit-buttons button {
-    border: none;
-    padding: 4px 8px;
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 10px;
+    .chat-user > img:first-of-type {
+        width: 38px;
+        height: 38px;
+    }
+
+
+    .chat-user-name {
+        min-width: 0;
+        flex: 1;
+    }
+
+
+    .chat-user p {
+        font-size: 15px;
+
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+
+    .user-status {
+        font-size: 9px;
+    }
+
+
+    .chat-user .help {
+        width: 20px;
+        height: 20px;
+    }
+
+
+    /* Messages */
+
+    .chat-msg {
+        min-height: 0;
+
+        padding: 15px 10px;
+
+        gap: 10px;
+    }
+
+
+    .s-msg,
+    .r-msg {
+        max-width: 85%;
+    }
+
+
+    .s-msg .msg,
+    .r-msg .msg {
+        font-size: 13px;
+        padding: 9px 12px;
+    }
+
+
+    /* Mobile images */
+
+    .msg-img {
+        max-width: min(230px, 75vw);
+        max-height: 300px;
+
+        object-fit: contain;
+    }
+
+
+    /* Input */
+
+    .chat-input {
+        min-height: 60px;
+        height: 60px;
+
+        flex-shrink: 0;
+
+        padding: 0 10px;
+    }
+
+
+    .chat-input input[type="text"] {
+        min-width: 0;
+
+        font-size: 13px;
+    }
+
+
+    .chat-input label img {
+        width: 22px;
+        height: 22px;
+    }
+
+
+    .chat-input .send-button {
+        width: 28px;
+        height: 28px;
+    }
+
+
+    /* Message menu */
+
+    .message-menu {
+        bottom: 25px;
+        right: 0;
+    }
+
 }
