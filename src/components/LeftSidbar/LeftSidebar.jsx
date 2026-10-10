@@ -8,496 +8,396 @@ import {
     getDocs,
     onSnapshot,
     orderBy,
-    query
+    query,
+    where
 } from 'firebase/firestore'
 
 import { AppContext } from '../../context/AppContext'
 import { useNavigate } from 'react-router-dom'
 
-
 const LeftSidebar = ({ onUserSelect }) => {
+    const [users, setUsers] = useState([])
+    const [search, setSearch] = useState('')
+    const [lastMessages, setLastMessages] = useState({})
+    const [unreadCounts, setUnreadCounts] = useState({})
+    const [loading, setLoading] = useState(true)
+    const [fetchError, setFetchError] = useState('')
 
-    const [users, setUsers] = useState([]);
-    const [search, setSearch] = useState("");
+    const { selectedUser, setSelectedUser } = useContext(AppContext)
+    const navigate = useNavigate()
 
-    // Latest message of every chat
-    const [lastMessages, setLastMessages] = useState({});
-
-    // Unread messages of every chat
-    const [unreadCounts, setUnreadCounts] = useState({});
-
-
-    const {
-        selectedUser,
-        setSelectedUser
-    } = useContext(AppContext);
-
-    const navigate = useNavigate();
-
-
-    // Fetch all users
-    const fetchUsers = async () => {
-
-        try {
-
-            const userRef = collection(db, "users");
-
-            const snapshot = await getDocs(userRef);
-
-            const usersList = snapshot.docs
-                .map((doc) => ({
-                    ...doc.data(),
-                    id: doc.id
-                }))
-                .filter(
-                    (user) =>
-                        user.id !== auth.currentUser?.uid
-                );
-
-            setUsers(usersList);
-
-        } catch (error) {
-
-            console.error(
-                "Error fetching users:",
-                error
-            );
-
-        }
-
-    };
-
-
-    // Load users
+    // Load all users except the currently logged-in user
     useEffect(() => {
+        let isMounted = true
 
-        fetchUsers();
+        const fetchUsers = async () => {
+            try {
+                setLoading(true)
+                setFetchError('')
 
-    }, []);
+                const currentUser = auth.currentUser
 
-
-    // Listen to latest message + unread messages
-    useEffect(() => {
-
-        if (
-            !auth.currentUser ||
-            users.length === 0
-        ) {
-            return;
-        }
-
-
-        const unsubscribeFunctions = [];
-
-        const currentUserId =
-            auth.currentUser.uid;
-
-
-        users.forEach((user) => {
-
-            const selectedUserId =
-                user.id;
-
-
-            // Same chat id for both users
-            const chatId = [
-                currentUserId,
-                selectedUserId
-            ]
-                .sort()
-                .join("_");
-
-
-            const messagesRef = collection(
-                db,
-                "chats",
-                chatId,
-                "messages"
-            );
-
-
-            // Get latest message
-            const q = query(
-                messagesRef,
-                orderBy("createdAt", "desc")
-            );
-
-
-            const unsubscribe = onSnapshot(
-                q,
-                (snapshot) => {
-
-                    if (snapshot.empty) {
-
-                        setLastMessages((prev) => ({
-                            ...prev,
-                            [user.id]: null
-                        }));
-
-                        setUnreadCounts((prev) => ({
-                            ...prev,
-                            [user.id]: 0
-                        }));
-
-                        return;
-
+                if (!currentUser) {
+                    if (isMounted) {
+                        setUsers([])
+                        setFetchError('Please log in to view users.')
                     }
-
-
-                    const messages =
-                        snapshot.docs.map(
-                            (messageDoc) => ({
-                                id: messageDoc.id,
-                                ...messageDoc.data()
-                            })
-                        );
-
-
-                    // Latest message
-                    const latestMessage =
-                        messages[0];
-
-
-                    setLastMessages((prev) => ({
-                        ...prev,
-                        [user.id]: latestMessage
-                    }));
-
-
-                    // Count unread received messages
-                    const unreadCount =
-                        messages.filter(
-                            (msg) =>
-                                msg.receiverId ===
-                                    currentUserId &&
-                                msg.read === false
-                        ).length;
-
-
-                    setUnreadCounts((prev) => ({
-                        ...prev,
-                        [user.id]: unreadCount
-                    }));
-
-                },
-                (error) => {
-
-                    console.error(
-                        "Error loading messages:",
-                        error
-                    );
-
+                    return
                 }
-            );
 
+                const usersRef = collection(db, 'users')
+                const snapshot = await getDocs(usersRef)
 
-            unsubscribeFunctions.push(
-                unsubscribe
-            );
+                const usersList = snapshot.docs
+                    .map((userDoc) => ({
+                        ...userDoc.data(),
+                        id: userDoc.id
+                    }))
+                    .filter((user) => user.id !== currentUser.uid)
 
-        });
+                if (isMounted) {
+                    setUsers(usersList)
+                }
+            } catch (error) {
+                console.error('Error fetching users:', {
+                    code: error.code,
+                    message: error.message
+                })
 
+                if (isMounted) {
+                    setFetchError(
+                        error.code === 'permission-denied'
+                            ? 'Permission denied while loading users. Check Firestore Rules.'
+                            : 'Could not load users. Please refresh the page.'
+                    )
+                }
+            } finally {
+                if (isMounted) {
+                    setLoading(false)
+                }
+            }
+        }
+
+        fetchUsers()
 
         return () => {
-
-            unsubscribeFunctions.forEach(
-                (unsubscribe) =>
-                    unsubscribe()
-            );
-
-        };
-
-    }, [users]);
-
-
-    // Search users
-    const filteredUsers = users.filter(
-        (user) => {
-
-            const searchText =
-                search.toLowerCase();
-
-            return (
-                user.name
-                    ?.toLowerCase()
-                    .includes(searchText) ||
-
-                user.username
-                    ?.toLowerCase()
-                    .includes(searchText) ||
-
-                user.email
-                    ?.toLowerCase()
-                    .includes(searchText)
-            );
-
+            isMounted = false
         }
-    );
+    }, [])
 
+    // Listen for chats involving the current user
+    useEffect(() => {
+        const currentUserId = auth.currentUser?.uid
 
-    // Format message time
+        if (!currentUserId || users.length === 0) {
+            setLastMessages({})
+            setUnreadCounts({})
+            return
+        }
+
+        let messageUnsubscribers = []
+
+        const chatsRef = collection(db, 'chats')
+        const userChatsQuery = query(
+            chatsRef,
+            where('participants', 'array-contains', currentUserId)
+        )
+
+        const unsubscribeChats = onSnapshot(
+            userChatsQuery,
+            (chatSnapshot) => {
+                // Clean up old message listeners before recreating them
+                messageUnsubscribers.forEach((unsubscribe) => unsubscribe())
+                messageUnsubscribers = []
+
+                const activeUserIds = new Set()
+
+                chatSnapshot.docs.forEach((chatDoc) => {
+                    const chatData = chatDoc.data()
+                    const participants = chatData.participants
+
+                    if (!Array.isArray(participants)) {
+                        return
+                    }
+
+                    const otherUserId = participants.find(
+                        (uid) => uid !== currentUserId
+                    )
+
+                    // Only show chats belonging to users in our user list
+                    if (
+                        !otherUserId ||
+                        !users.some((user) => user.id === otherUserId)
+                    ) {
+                        return
+                    }
+
+                    activeUserIds.add(otherUserId)
+
+                    const messagesRef = collection(
+                        db,
+                        'chats',
+                        chatDoc.id,
+                        'messages'
+                    )
+
+                    const messagesQuery = query(
+                        messagesRef,
+                        orderBy('createdAt', 'desc')
+                    )
+
+                    const unsubscribeMessages = onSnapshot(
+                        messagesQuery,
+                        (messagesSnapshot) => {
+                            const messages = messagesSnapshot.docs.map(
+                                (messageDoc) => ({
+                                    id: messageDoc.id,
+                                    ...messageDoc.data()
+                                })
+                            )
+
+                            const latestMessage = messages[0] || null
+
+                            const unreadCount = messages.filter(
+                                (message) =>
+                                    message.receiverId === currentUserId &&
+                                    message.read === false
+                            ).length
+
+                            setLastMessages((previous) => ({
+                                ...previous,
+                                [otherUserId]: latestMessage
+                            }))
+
+                            setUnreadCounts((previous) => ({
+                                ...previous,
+                                [otherUserId]: unreadCount
+                            }))
+                        },
+                        (error) => {
+                            console.error(
+                                `Error loading messages for ${otherUserId}:`,
+                                {
+                                    code: error.code,
+                                    message: error.message
+                                }
+                            )
+                        }
+                    )
+
+                    messageUnsubscribers.push(unsubscribeMessages)
+                })
+
+                // Remove previews for users who have no chat
+                setLastMessages((previous) => {
+                    const updated = { ...previous }
+
+                    users.forEach((user) => {
+                        if (!activeUserIds.has(user.id)) {
+                            delete updated[user.id]
+                        }
+                    })
+
+                    return updated
+                })
+
+                setUnreadCounts((previous) => {
+                    const updated = { ...previous }
+
+                    users.forEach((user) => {
+                        if (!activeUserIds.has(user.id)) {
+                            delete updated[user.id]
+                        }
+                    })
+
+                    return updated
+                })
+            },
+                (error) => {
+                console.error("Chat listener error code:", error.code);
+                console.error("Chat listener error message:", error.message);
+                console.log("Logged-in UID:", auth.currentUser?.uid);
+            }
+        )
+
+        return () => {
+            unsubscribeChats()
+            messageUnsubscribers.forEach((unsubscribe) => unsubscribe())
+        }
+    }, [users])
+
+    // Filter users by name, username or email
+    const filteredUsers = users.filter((user) => {
+        const searchText = search.toLowerCase().trim()
+
+        return (
+            user.name?.toLowerCase().includes(searchText) ||
+            user.username?.toLowerCase().includes(searchText) ||
+            user.email?.toLowerCase().includes(searchText)
+        )
+    })
+
+    // Format the latest message time
     const formatTime = (timestamp) => {
-
         if (!timestamp?.toDate) {
-            return "";
+            return ''
         }
 
-        return timestamp
-            .toDate()
-            .toLocaleTimeString([], {
-                hour: "2-digit",
-                minute: "2-digit"
-            });
+        return timestamp.toDate().toLocaleTimeString([], {
+            hour: '2-digit',
+            minute: '2-digit'
+        })
+    }
 
-    };
-
-
-    // Message preview
+    // Show a short preview of the latest message
     const getMessagePreview = (message) => {
-
         if (!message) {
-            return "";
+            return ''
         }
 
         if (message.image) {
-            return "📷 Image";
+            return '📷 Image'
         }
 
-        return message.text || "";
+        return message.text || ''
+    }
 
-    };
-
-
-    // Select user
+    // Open the selected user's chat
     const handleUserClick = (user) => {
+        setSelectedUser(user)
+        onUserSelect?.()
+    }
 
-        setSelectedUser(user);
-
-
-        // Open selected chat on mobile
-        if (onUserSelect) {
-            onUserSelect();
-        }
-
-    };
-
-
-    // Edit profile
+    // Open the profile editing page
     const handleEditProfile = () => {
+        navigate('/profile')
+    }
 
-        navigate("/profile");
-
-    };
-
-
-    // Logout
+    // Log out the current user
     const handleLogout = async () => {
-
         try {
-
-            await logout();
-
-            setSelectedUser(null);
-
-            navigate("/");
-
+            await logout()
+            setSelectedUser(null)
+            navigate('/')
         } catch (error) {
-
-            console.error(
-                "Logout error:",
-                error
-            );
-
+            console.error('Logout error:', error)
         }
-
-    };
-
+    }
 
     return (
-        <div className='ls'>
-
-
+        <div className="ls">
             <div className="ls-top">
-
                 <div className="ls-nav">
-
                     <img
                         src={assets.logo}
-                        className='logo'
-                        alt=""
+                        className="logo"
+                        alt="Chatapp"
                     />
 
-
-                    <div className='menu'>
-
+                    <div className="menu">
                         <img
                             src={assets.menu_icon}
-                            alt=""
+                            alt="Menu"
                         />
 
-
                         <div className="sub-menu">
-
-                            <p
-                                onClick={
-                                    handleEditProfile
-                                }
-                            >
+                            <p onClick={handleEditProfile}>
                                 Edit Profile
                             </p>
 
-
                             <hr />
 
-
-                            <p
-                                onClick={
-                                    handleLogout
-                                }
-                            >
+                            <p onClick={handleLogout}>
                                 Logout
                             </p>
-
                         </div>
-
                     </div>
-
                 </div>
 
-
-                {/* Search */}
-
-                <div className='ls-search'>
-
+                <div className="ls-search">
                     <img
                         src={assets.search_icon}
-                        alt=""
+                        alt="Search"
                     />
-
 
                     <input
                         type="text"
-                        placeholder="Search here.."
+                        placeholder="Search here..."
                         value={search}
-                        onChange={(e) =>
-                            setSearch(
-                                e.target.value
-                            )
-                        }
+                        onChange={(event) => setSearch(event.target.value)}
                     />
-
                 </div>
-
             </div>
-
-
-            {/* Users */}
 
             <div className="ls-list">
+                {loading ? (
+                    <p className="ls-message">Loading users...</p>
+                ) : fetchError ? (
+                    <p className="ls-message">{fetchError}</p>
+                ) : filteredUsers.length === 0 ? (
+                    <p className="ls-message">
+                        {users.length === 0
+                            ? 'No other users registered yet.'
+                            : 'No users found.'}
+                    </p>
+                ) : (
+                    filteredUsers.map((user) => {
+                        const lastMessage = lastMessages[user.id]
+                        const unreadCount = unreadCounts[user.id] || 0
 
-                {filteredUsers.map((user) => {
+                        return (
+                            <div
+                                key={user.id}
+                                className={`friends ${
+                                    selectedUser?.id === user.id
+                                        ? 'selected'
+                                        : ''
+                                }`}
+                                onClick={() => handleUserClick(user)}
+                            >
+                                <img
+                                    src={user.avatar || assets.profile_img}
+                                    alt="User avatar"
+                                />
 
-                    const lastMessage =
-                        lastMessages[user.id];
+                                <div className="friend-info">
+                                    <div className="friend-name-row">
+                                        <p>
+                                            {user.name ||
+                                                user.username ||
+                                                user.email ||
+                                                'Unknown user'}
+                                        </p>
 
-                    const unreadCount =
-                        unreadCounts[user.id] || 0;
-
-
-                    return (
-
-                        <div
-                            key={user.id}
-
-                            className={
-                                `friends ${
-                                    selectedUser?.id ===
-                                    user.id
-                                        ? "selected"
-                                        : ""
-                                }`
-                            }
-
-                            onClick={() =>
-                                handleUserClick(user)
-                            }
-                        >
-
-
-                            <img
-                                src={
-                                    user.avatar ||
-                                    assets.profile_img
-                                }
-                                alt=""
-                            />
-
-
-                            <div className="friend-info">
-
-
-                                <div className="friend-name-row">
-
-                                    <p>
-                                        {
-                                            user.name ||
-                                            user.username ||
-                                            user.email
-                                        }
-                                    </p>
-
-
-                                    {lastMessage && (
-
-                                        <span className="last-time">
-                                            {
-                                                formatTime(
+                                        {lastMessage && (
+                                            <span className="last-time">
+                                                {formatTime(
                                                     lastMessage.createdAt
-                                                )
-                                            }
+                                                )}
+                                            </span>
+                                        )}
+                                    </div>
+
+                                    <div className="friend-bottom">
+                                        <span className="last-message">
+                                            {lastMessage
+                                                ? getMessagePreview(lastMessage)
+                                                : user.bio ||
+                                                  'Start a conversation'}
                                         </span>
 
-                                    )}
-
+                                        {unreadCount > 0 && (
+                                            <span className="unread-count">
+                                                {unreadCount}
+                                            </span>
+                                        )}
+                                    </div>
                                 </div>
-
-
-                                <div className="friend-bottom">
-
-                                    <span className="last-message">
-
-                                        {lastMessage
-                                            ? getMessagePreview(
-                                                lastMessage
-                                            )
-                                            : user.bio}
-
-                                    </span>
-
-
-                                    {/* Unread count */}
-
-                                    {unreadCount > 0 && (
-
-                                        <span className="unread-count">
-                                            {unreadCount}
-                                        </span>
-
-                                    )}
-
-                                </div>
-
-
                             </div>
-
-                        </div>
-
-                    );
-
-                })}
-
+                        )
+                    })
+                )}
             </div>
-
         </div>
     )
 }

@@ -1,65 +1,76 @@
-.rs{
+.rs {
     color: white;
     background: #001030;
     position: relative;
     height: 75vh;
-    overflow-y: scroll;
+    overflow-y: auto;
 }
-.rs-profile{
+
+.rs-profile {
     padding: 60px 20px;
     text-align: center;
     max-width: 70%;
     margin: auto;
 }
 
-.rs-profile img{
+.rs-profile img {
     width: 110px;
-    aspect-ratio: 1/1;
+    aspect-ratio: 1 / 1;
     border-radius: 50%;
+    object-fit: cover;
 }
 
-.rs-profile h3{
+.rs-profile h3 {
     font-size: 18px;
     font-weight: 400;
     display: flex;
     align-items: center;
     justify-content: center;
     gap: 5px;
-    margin: 5px 0px;
+    margin: 5px 0;
     white-space: nowrap;
 }
-.rs-profile p{
+
+.rs-profile p {
     font-size: 10px;
-    opacity: 80%;
+    opacity: 0.8;
     font-weight: 300;
-}
-.rs hr{
-    border-color: #ffffff50;
-    margin: 15px 0px;
+    overflow-wrap: anywhere;
 }
 
-.rs-media{
-    padding: 0px 20px;
+.rs hr {
+    border-color: #ffffff50;
+    margin: 15px 0;
+}
+
+.rs-media {
+    padding: 0 20px;
     font-size: 13px;
 }
-.rs-media div{
+
+.rs-media div {
     max-height: 180px;
-    overflow-y: scroll;
+    overflow-y: auto;
     display: grid;
-    grid-template-columns: 1fr 1fr 1fr;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 5px;
     margin-top: 8px;
 }
-.rs-media div img{
-    width: 60px;
+
+.rs-media div img {
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    object-fit: cover;
     border-radius: 4px;
     cursor: pointer;
 }
-.rs button{
+
+/* Logout button */
+.rs .rs-logout {
     position: absolute;
     bottom: 20px;
     left: 50%;
-    transform: translatex(-50%);
+    transform: translateX(-50%);
     background: #077eff;
     color: white;
     border: none;
@@ -68,4 +79,54 @@
     padding: 10px 65px;
     border-radius: 20px;
     cursor: pointer;
+    white-space: nowrap;
+    z-index: 2;
 }
+
+/* Close button is hidden on desktop */
+.rs .rs-close {
+    display: none;
+}
+
+/* Mobile profile panel */
+@media (max-width: 768px) {
+    .rs {
+        display: none;
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        min-height: 100%;
+        z-index: 20;
+        overflow-y: auto;
+        background: #001030;
+    }
+
+    .rs.rs-mobile-open {
+        display: block;
+    }
+
+    .rs .rs-close {
+        display: block;
+        position: absolute;
+        top: 12px;
+        right: 16px;
+        z-index: 25;
+        background: transparent;
+        color: white;
+        border: none;
+        font-size: 30px;
+        padding: 0 8px;
+        cursor: pointer;
+    }
+
+    .rs-profile {
+        padding-top: 65px;
+        max-width: 90%;
+    }
+
+    .rs-media div {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+}
+

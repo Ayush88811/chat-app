@@ -1,8 +1,9 @@
+
 import React, { useContext, useEffect, useRef, useState } from 'react'
-import './ChatBox.css';
-import assets from '../../assets/assets';
-import { AppContext } from '../../context/AppContext';
-import { auth, db } from '../../config/firebase';
+import './ChatBox.css'
+import assets from '../../assets/assets'
+import { AppContext } from '../../context/AppContext'
+import { auth, db } from '../../config/firebase'
 
 import {
     addDoc,
@@ -15,597 +16,338 @@ import {
     serverTimestamp,
     setDoc,
     updateDoc
-} from 'firebase/firestore';
+} from 'firebase/firestore'
 
-import uploadImage from '../../lib/upload';
+import uploadImage from '../../lib/upload'
 
+const ChatBox = ({ onInfoClick }) => {
+    const { selectedUser, setSelectedUser, userData } = useContext(AppContext)
 
-const ChatBox = () => {
+    const [messages, setMessages] = useState([])
+    const [message, setMessage] = useState('')
+    const [selectedUserData, setSelectedUserData] = useState(null)
+    const [editingMessageId, setEditingMessageId] = useState(null)
+    const [editText, setEditText] = useState('')
+    const [menuMessageId, setMenuMessageId] = useState(null)
 
-    const {
-        selectedUser,
-        setSelectedUser,
-        userData
-    } = useContext(AppContext);
+    const messagesEndRef = useRef(null)
 
-    const [messages, setMessages] = useState([]);
-    const [message, setMessage] = useState("");
-
-    // Selected user's latest profile data
-    const [selectedUserData, setSelectedUserData] = useState(null);
-
-    // Edit message states
-    const [editingMessageId, setEditingMessageId] = useState(null);
-    const [editText, setEditText] = useState("");
-
-    // Message menu
-    const [menuMessageId, setMenuMessageId] = useState(null);
-
-    // Auto scroll
-    const messagesEndRef = useRef(null);
-
-
-    // Get selected user's latest profile data
+    // Keep the selected user's profile updated
     useEffect(() => {
-
         if (!selectedUser?.id) {
-            setSelectedUserData(null);
-            return;
+            setSelectedUserData(null)
+            return
         }
 
-        const userRef = doc(
-            db,
-            "users",
-            selectedUser.id
-        );
+        const userRef = doc(db, 'users', selectedUser.id)
 
         const unsubscribe = onSnapshot(
             userRef,
             (snapshot) => {
-
-                if (snapshot.exists()) {
-                    setSelectedUserData(snapshot.data());
-                }
-
+                setSelectedUserData(
+                    snapshot.exists() ? snapshot.data() : null
+                )
+            },
+            (error) => {
+                console.error('Error loading user profile:', error)
             }
-        );
+        )
 
-        return () => unsubscribe();
+        return () => unsubscribe()
+    }, [selectedUser?.id])
 
-    }, [selectedUser?.id]);
-
-
-    // Get messages in real time
+    // Listen for messages in the selected chat
     useEffect(() => {
+        const currentUserId = auth.currentUser?.uid
+        const selectedUserId = selectedUser?.id
 
-        if (!selectedUser || !auth.currentUser) {
-            setMessages([]);
-            return;
+        if (!currentUserId || !selectedUserId) {
+            setMessages([])
+            return
         }
 
-        const currentUserId =
-            auth.currentUser.uid;
+        const chatId = [currentUserId, selectedUserId].sort().join('_')
+        const messagesRef = collection(db, 'chats', chatId, 'messages')
+        const messagesQuery = query(messagesRef, orderBy('createdAt', 'asc'))
 
-        const selectedUserId =
-            selectedUser.id;
-
-
-        // Same chat id for both users
-        const chatId = [
-            currentUserId,
-            selectedUserId
-        ]
-            .sort()
-            .join("_");
-
-
-        const messagesRef = collection(
-            db,
-            "chats",
-            chatId,
-            "messages"
-        );
-
-
-        // Get old messages first
-        const q = query(
-            messagesRef,
-            orderBy("createdAt", "asc")
-        );
-
-
-        // Listen for new messages
         const unsubscribe = onSnapshot(
-            q,
+            messagesQuery,
             (snapshot) => {
+                const messagesList = snapshot.docs.map((messageDoc) => ({
+                    id: messageDoc.id,
+                    ...messageDoc.data()
+                }))
 
-                const messagesList =
-                    snapshot.docs.map((messageDoc) => ({
-                        id: messageDoc.id,
-                        ...messageDoc.data()
-                    }));
+                setMessages(messagesList)
 
-
-                setMessages(messagesList);
-
-
-                // Mark received unread messages as read
+                // Mark received messages as read
                 messagesList.forEach(async (msg) => {
-
                     if (
                         msg.receiverId === currentUserId &&
                         msg.read === false
                     ) {
-
                         try {
-
                             await updateDoc(
-                                doc(
-                                    db,
-                                    "chats",
-                                    chatId,
-                                    "messages",
-                                    msg.id
-                                ),
-                                {
-                                    read: true
-                                }
-                            );
-
+                                doc(db, 'chats', chatId, 'messages', msg.id),
+                                { read: true }
+                            )
                         } catch (error) {
-
-                            console.error(
-                                "Error marking message as read:",
-                                error
-                            );
-
+                            console.error('Error marking message as read:', error)
                         }
-
                     }
-
-                });
-
+                })
             },
             (error) => {
-
-                console.error(
-                    "Error loading messages:",
-                    error
-                );
-
+                console.error('Error loading messages:', error)
             }
-        );
+        )
 
+        return () => unsubscribe()
+    }, [selectedUser?.id])
 
-        return () => unsubscribe();
-
-    }, [selectedUser]);
-
-
-    // Scroll to latest message
+    // Scroll to the newest message
     useEffect(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    }, [messages])
 
-        messagesEndRef.current?.scrollIntoView({
-            behavior: "smooth"
-        });
-
-    }, [messages]);
-
-
-    // Check online status
     const isUserOnline = () => {
+        if (!selectedUserData?.lastSeen) return false
 
-        if (!selectedUserData?.lastSeen) {
-            return false;
-        }
+        return Date.now() - selectedUserData.lastSeen < 2 * 60 * 1000
+    }
 
-        return (
-            Date.now() -
-            selectedUserData.lastSeen <
-            2 * 60 * 1000
-        );
-
-    };
-
-
-    // Format last seen
     const formatLastSeen = () => {
+        if (!selectedUserData?.lastSeen) return 'Offline'
+        if (isUserOnline()) return 'Online'
 
-        if (!selectedUserData?.lastSeen) {
-            return "Offline";
-        }
+        return `Last seen ${new Date(selectedUserData.lastSeen).toLocaleTimeString([], {
+            hour: '2-digit',
+            minute: '2-digit'
+        })}`
+    }
 
-        if (isUserOnline()) {
-            return "Online";
-        }
+    // Create the chat document before adding its first message
+    const ensureChatDocument = async (currentUserId, selectedUserId) => {
+        const chatId = [currentUserId, selectedUserId].sort().join('_')
 
-        const lastSeen = new Date(
-            selectedUserData.lastSeen
-        );
+        await setDoc(
+            doc(db, 'chats', chatId),
+            {
+                participants: [currentUserId, selectedUserId].sort()
+            },
+            { merge: true }
+        )
 
-        return `Last seen ${lastSeen.toLocaleTimeString([], {
-            hour: "2-digit",
-            minute: "2-digit"
-        })}`;
+        return chatId
+    }
 
-    };
-
-
-    // Send text message
+    // Send a text message
     const sendMessage = async () => {
-
-        if (!message.trim() || !selectedUser) {
-            return;
+        if (!message.trim() || !selectedUser?.id || !auth.currentUser) {
+            return
         }
 
+        const textToSend = message.trim()
+        const currentUserId = auth.currentUser.uid
+        const selectedUserId = selectedUser.id
+
         try {
-
-            const currentUserId =
-                auth.currentUser.uid;
-
-            const selectedUserId =
-                selectedUser.id;
-
-
-            const chatId = [
+            // Ensure participants exist before writing messages
+            const chatId = await ensureChatDocument(
                 currentUserId,
                 selectedUserId
-            ]
-                .sort()
-                .join("_");
+            )
 
+            const messagesRef = collection(db, 'chats', chatId, 'messages')
 
-            const messagesRef = collection(
-                db,
-                "chats",
-                chatId,
-                "messages"
-            );
-
-
-            // Add new message
             await addDoc(messagesRef, {
-
                 senderId: currentUserId,
                 receiverId: selectedUserId,
-                text: message.trim(),
-
-                // Receiver has not read it yet
+                text: textToSend,
                 read: false,
-
                 createdAt: serverTimestamp()
+            })
 
-            });
+            setMessage('')
 
-
-            // Update latest message
+            // Update the latest message shown in the sidebar
             await setDoc(
-                doc(
-                    db,
-                    "chats",
-                    chatId
-                ),
+                doc(db, 'chats', chatId),
                 {
                     lastMessage: {
-                        text: message.trim(),
+                        text: textToSend,
                         senderId: currentUserId,
                         createdAt: serverTimestamp()
                     }
                 },
-                {
-                    merge: true
-                }
-            );
-
-
-            // Clear input
-            setMessage("");
-
+                { merge: true }
+            )
         } catch (error) {
-
-            console.error(
-                "Error sending message:",
-                error
-            );
-
+            console.error('Error sending message:', error)
         }
+    }
 
-    };
-
-
-    // Send image through Cloudinary
+    // Upload an image to Cloudinary and send its URL
     const sendImage = async (file) => {
-
-        if (!file || !selectedUser) {
-            return;
+        if (!file || !selectedUser?.id || !auth.currentUser) {
+            return
         }
 
         try {
+            const currentUserId = auth.currentUser.uid
+            const selectedUserId = selectedUser.id
 
-            const currentUserId =
-                auth.currentUser.uid;
+            const imageUrl = await uploadImage(file)
 
-            const selectedUserId =
-                selectedUser.id;
-
-
-            // Upload image to Cloudinary
-            const imageUrl =
-                await uploadImage(file);
-
-
-            const chatId = [
+            // Create or update the chat before adding the image message
+            const chatId = await ensureChatDocument(
                 currentUserId,
                 selectedUserId
-            ]
-                .sort()
-                .join("_");
+            )
 
+            const messagesRef = collection(db, 'chats', chatId, 'messages')
 
-            const messagesRef = collection(
-                db,
-                "chats",
-                chatId,
-                "messages"
-            );
-
-
-            // Add image message
             await addDoc(messagesRef, {
-
                 senderId: currentUserId,
                 receiverId: selectedUserId,
-                text: "",
+                text: '',
                 image: imageUrl,
-
-                // Receiver has not read it yet
                 read: false,
-
                 createdAt: serverTimestamp()
+            })
 
-            });
-
-
-            // Update latest message
             await setDoc(
-                doc(
-                    db,
-                    "chats",
-                    chatId
-                ),
+                doc(db, 'chats', chatId),
                 {
                     lastMessage: {
-                        text: "📷 Image",
+                        text: '📷 Image',
                         senderId: currentUserId,
                         createdAt: serverTimestamp()
                     }
                 },
-                {
-                    merge: true
-                }
-            );
-
+                { merge: true }
+            )
         } catch (error) {
-
-            console.error(
-                "Error sending image:",
-                error
-            );
-
+            console.error('Error sending image:', error)
         }
+    }
 
-    };
+    const handleImageChange = (event) => {
+        const file = event.target.files?.[0]
 
+        if (file) sendImage(file)
 
-    // Handle image selection
-    const handleImageChange = (e) => {
+        // Let the same image be selected again later
+        event.target.value = ''
+    }
 
-        const file = e.target.files[0];
-
-        if (file) {
-            sendImage(file);
-        }
-
-    };
-
-
-    // Start editing
     const startEdit = (msg) => {
+        setEditingMessageId(msg.id)
+        setEditText(msg.text || '')
+        setMenuMessageId(null)
+    }
 
-        setEditingMessageId(msg.id);
-        setEditText(msg.text || "");
-
-        setMenuMessageId(null);
-
-    };
-
-
-    // Cancel editing
     const cancelEdit = () => {
+        setEditingMessageId(null)
+        setEditText('')
+    }
 
-        setEditingMessageId(null);
-        setEditText("");
-
-    };
-
-
-    // Save edited message
+    // Save edited text
     const saveEdit = async () => {
-
-        if (
-            !editText.trim() ||
-            !editingMessageId ||
-            !selectedUser
-        ) {
-            return;
+        if (!editText.trim() || !editingMessageId || !selectedUser?.id || !auth.currentUser) {
+            return
         }
 
         try {
-
             const chatId = [
                 auth.currentUser.uid,
                 selectedUser.id
-            ]
-                .sort()
-                .join("_");
+            ].sort().join('_')
 
+            const latestMessage = messages[messages.length - 1]
 
             await updateDoc(
-                doc(
-                    db,
-                    "chats",
-                    chatId,
-                    "messages",
-                    editingMessageId
-                ),
+                doc(db, 'chats', chatId, 'messages', editingMessageId),
                 {
                     text: editText.trim(),
                     edited: true
                 }
-            );
+            )
 
-
-            // Update last message if this is the latest
-            const latestMessage =
-                messages[messages.length - 1];
-
-
-            if (
-                latestMessage?.id ===
-                editingMessageId
-            ) {
-
+            // Update the sidebar preview if this was the latest message
+            if (latestMessage?.id === editingMessageId) {
                 await setDoc(
-                    doc(
-                        db,
-                        "chats",
-                        chatId
-                    ),
+                    doc(db, 'chats', chatId),
                     {
                         lastMessage: {
                             text: editText.trim(),
-                            senderId:
-                                auth.currentUser.uid,
-                            createdAt:
-                                latestMessage.createdAt
+                            senderId: auth.currentUser.uid,
+                            createdAt: latestMessage.createdAt
                         }
                     },
-                    {
-                        merge: true
-                    }
-                );
-
+                    { merge: true }
+                )
             }
 
-
-            cancelEdit();
-
+            cancelEdit()
         } catch (error) {
-
-            console.error(
-                "Error editing message:",
-                error
-            );
-
+            console.error('Error editing message:', error)
         }
+    }
 
-    };
-
-
-    // Delete message
+    // Delete a message sent by the current user
     const deleteMessage = async (messageId) => {
-
-        if (!selectedUser) {
-            return;
-        }
+        if (!selectedUser?.id || !auth.currentUser) return
 
         try {
-
             const chatId = [
                 auth.currentUser.uid,
                 selectedUser.id
-            ]
-                .sort()
-                .join("_");
-
+            ].sort().join('_')
 
             await deleteDoc(
-                doc(
-                    db,
-                    "chats",
-                    chatId,
-                    "messages",
-                    messageId
-                )
-            );
+                doc(db, 'chats', chatId, 'messages', messageId)
+            )
 
-
-            setMenuMessageId(null);
-
+            setMenuMessageId(null)
         } catch (error) {
-
-            console.error(
-                "Error deleting message:",
-                error
-            );
-
+            console.error('Error deleting message:', error)
         }
+    }
 
-    };
-
-
-    // Send message with Enter
-    const handleKeyDown = (e) => {
-
-        if (e.key === "Enter") {
+    const handleKeyDown = (event) => {
+        if (event.key === 'Enter' && !event.shiftKey) {
+            event.preventDefault()
 
             if (editingMessageId) {
-                saveEdit();
+                saveEdit()
             } else {
-                sendMessage();
+                sendMessage()
             }
-
         }
+    }
 
-    };
-
-
-    // Format message time
     const formatTime = (timestamp) => {
+        if (!timestamp?.toDate) return ''
 
-        if (!timestamp?.toDate) {
-            return "";
-        }
-
-        return timestamp
-            .toDate()
-            .toLocaleTimeString([], {
-                hour: "2-digit",
-                minute: "2-digit"
-            });
-
-    };
-
+        return timestamp.toDate().toLocaleTimeString([], {
+            hour: '2-digit',
+            minute: '2-digit'
+        })
+    }
 
     return (
-        <div className='chat-box'>
-
-
+        <div className="chat-box">
             {/* Chat header */}
-
             <div className="chat-user">
-
-                {/* Mobile back button */}
-
                 <button
+                    type="button"
                     className="mobile-back"
-                    onClick={() =>
-                        setSelectedUser(null)
-                    }
+                    onClick={() => setSelectedUser(null)}
+                    aria-label="Back to chats"
                 >
                     ←
                 </button>
-
 
                 <img
                     src={
@@ -613,300 +355,159 @@ const ChatBox = () => {
                         selectedUser?.avatar ||
                         assets.profile_img
                     }
-                    alt=""
+                    alt="User profile"
                 />
 
-
                 <div className="chat-user-name">
-
                     <p>
                         {selectedUserData?.name ||
                             selectedUser?.name ||
                             selectedUser?.username ||
-                            "Select a user"}
+                            'Select a user'}
                     </p>
 
-
                     {selectedUser && (
-
                         <div className="user-status">
-
                             {isUserOnline() && (
                                 <span className="online-dot"></span>
                             )}
-
-                            <span>
-                                {formatLastSeen()}
-                            </span>
-
+                            <span>{formatLastSeen()}</span>
                         </div>
-
                     )}
-
                 </div>
 
-
-                <img
-                    src={assets.help_icon}
-                    className='help'
-                    alt=""
-                />
-
+                <button
+                    type="button"
+                    className="info-button"
+                    onClick={onInfoClick}
+                    aria-label="Open user profile"
+                    title="User information"
+                >
+                    <img
+                        src={assets.help_icon}
+                        className="help"
+                        alt=""
+                    />
+                </button>
             </div>
 
-
             {/* Messages */}
-
             <div className="chat-msg">
-
                 {!selectedUser ? (
-
-                    <p className="no-message">
-                        Select a user to start chatting
-                    </p>
-
+                    <p className="no-message">Select a user to start chatting</p>
                 ) : messages.length === 0 ? (
-
-                    <p className="no-message">
-                        No messages yet
-                    </p>
-
+                    <p className="no-message">No messages yet</p>
                 ) : (
-
                     messages.map((msg) => {
-
-                        const isSender =
-                            msg.senderId ===
-                            auth.currentUser.uid;
-
+                        const isSender = msg.senderId === auth.currentUser?.uid
 
                         return (
-
                             <div
                                 key={msg.id}
-                                className={
-                                    isSender
-                                        ? "s-msg"
-                                        : "r-msg"
-                                }
+                                className={isSender ? 's-msg' : 'r-msg'}
                             >
-
-                                {/* Edit mode */}
-
                                 {editingMessageId === msg.id ? (
-
                                     <div className="edit-box">
-
                                         <input
                                             type="text"
                                             value={editText}
-                                            onChange={(e) =>
-                                                setEditText(
-                                                    e.target.value
-                                                )
-                                            }
-                                            onKeyDown={
-                                                handleKeyDown
-                                            }
+                                            onChange={(event) => setEditText(event.target.value)}
+                                            onKeyDown={handleKeyDown}
                                             autoFocus
                                         />
-
-
                                         <div className="edit-buttons">
-
-                                            <button
-                                                onClick={
-                                                    saveEdit
-                                                }
-                                            >
-                                                Save
-                                            </button>
-
-                                            <button
-                                                onClick={
-                                                    cancelEdit
-                                                }
-                                            >
-                                                Cancel
-                                            </button>
-
+                                            <button type="button" onClick={saveEdit}>Save</button>
+                                            <button type="button" onClick={cancelEdit}>Cancel</button>
                                         </div>
-
                                     </div>
-
                                 ) : (
-
                                     <>
-
-                                        {/* Image or text */}
-
                                         {msg.image ? (
-
                                             <img
                                                 className="msg-img"
                                                 src={msg.image}
-                                                alt="message"
+                                                alt="Shared image"
                                             />
-
                                         ) : (
-
                                             <p className="msg">
-
                                                 {msg.text}
-
                                                 {msg.edited && (
-                                                    <span className="edited-text">
-                                                        {" "}edited
-                                                    </span>
+                                                    <span className="edited-text"> edited</span>
                                                 )}
-
                                             </p>
-
                                         )}
 
-
-                                        {/* Message menu */}
-
                                         {isSender && (
-
                                             <div className="message-options">
-
                                                 <button
+                                                    type="button"
                                                     className="more-btn"
-                                                    onClick={() =>
-                                                        setMenuMessageId(
-                                                            menuMessageId ===
-                                                                msg.id
-                                                                ? null
-                                                                : msg.id
-                                                        )
-                                                    }
+                                                    onClick={() => setMenuMessageId(
+                                                        menuMessageId === msg.id ? null : msg.id
+                                                    )}
+                                                    aria-label="Message options"
                                                 >
                                                     ⋮
                                                 </button>
 
-
-                                                {menuMessageId ===
-                                                    msg.id && (
-
+                                                {menuMessageId === msg.id && (
                                                     <div className="message-menu">
-
                                                         {!msg.image && (
-
-                                                            <button
-                                                                onClick={() =>
-                                                                    startEdit(
-                                                                        msg
-                                                                    )
-                                                                }
-                                                            >
+                                                            <button type="button" onClick={() => startEdit(msg)}>
                                                                 Edit
                                                             </button>
-
                                                         )}
-
-
                                                         <button
-                                                            onClick={() =>
-                                                                deleteMessage(
-                                                                    msg.id
-                                                                )
-                                                            }
+                                                            type="button"
+                                                            onClick={() => deleteMessage(msg.id)}
                                                         >
                                                             Delete
                                                         </button>
-
                                                     </div>
-
                                                 )}
-
                                             </div>
-
                                         )}
-
                                     </>
-
                                 )}
 
-
-                                {/* Avatar + time + read status */}
-
+                                {/* Avatar, time and read receipt */}
                                 <div className="msg-info">
-
                                     <img
                                         src={
                                             isSender
-                                                ? (
-                                                    userData?.avatar ||
-                                                    assets.profile_img
-                                                )
-                                                : (
-                                                    selectedUserData?.avatar ||
-                                                    selectedUser?.avatar ||
-                                                    assets.profile_img
-                                                )
+                                                ? userData?.avatar || assets.profile_img
+                                                : selectedUserData?.avatar ||
+                                                  selectedUser?.avatar ||
+                                                  assets.profile_img
                                         }
                                         alt=""
                                     />
 
-
-                                    <p>
-                                        {formatTime(
-                                            msg.createdAt
-                                        )}
-                                    </p>
-
-
-                                    {/* Read receipt */}
+                                    <p>{formatTime(msg.createdAt)}</p>
 
                                     {isSender && (
-
-                                        <span
-                                            className={
-                                                msg.read
-                                                    ? "read-status read"
-                                                    : "read-status"
-                                            }
-                                        >
-                                            {msg.read
-                                                ? "✓✓"
-                                                : "✓"}
+                                        <span className={msg.read ? 'read-status read' : 'read-status'}>
+                                            {msg.read ? '✓✓' : '✓'}
                                         </span>
-
                                     )}
-
                                 </div>
-
                             </div>
-
-                        );
-
+                        )
                     })
-
                 )}
 
-
                 <div ref={messagesEndRef}></div>
-
             </div>
 
-
             {/* Message input */}
-
             <div className="chat-input">
-
                 <input
                     type="text"
                     placeholder="Send a message"
                     value={message}
-                    onChange={(e) =>
-                        setMessage(e.target.value)
-                    }
+                    onChange={(event) => setMessage(event.target.value)}
                     onKeyDown={handleKeyDown}
                 />
-
-
-                {/* Image input */}
 
                 <input
                     type="file"
@@ -916,28 +517,17 @@ const ChatBox = () => {
                     onChange={handleImageChange}
                 />
 
-
                 <label htmlFor="image">
-
-                    <img
-                        src={assets.gallery_icon}
-                        alt="gallery"
-                    />
-
+                    <img src={assets.gallery_icon} alt="Choose image" />
                 </label>
-
-
-                {/* Send button */}
 
                 <img
                     src={assets.send_button}
-                    alt="send"
+                    alt="Send message"
                     className="send-button"
                     onClick={sendMessage}
                 />
-
             </div>
-
         </div>
     )
 }

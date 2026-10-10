@@ -1,36 +1,54 @@
-.login{
+
+.login {
     min-height: 100vh;
-    background:url(/background.png) no-repeat;
+    min-height: 100dvh;
+    background: url('/background.png') no-repeat center;
     background-size: cover;
-    display:flex;
+    display: flex;
     align-items: center;
     justify-content: space-evenly;
+    gap: 30px;
+    padding: 30px;
+    box-sizing: border-box;
 }
 
-.login .logo{
-    width: max(20vw,200px);
+.login .logo {
+    width: max(20vw, 200px);
+    max-width: 100%;
+    height: auto;
 }
 
-.login-form{
-    background:white;
-    padding: 20px 30px;
+.login-form {
+    background: white;
+    width: 100%;
+    max-width: 380px;
+    min-width: 0;
+    padding: 25px 30px;
+    box-sizing: border-box;
     display: flex;
     flex-direction: column;
     gap: 20px;
     border-radius: 10px;
 }
 
-.login-form h2{
+.login-form h2 {
     font-weight: 500;
+    margin: 0;
 }
-.form-input{
-    padding: 8px 10px;
+
+.form-input {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 10px;
     border: 1px solid #c9c9c9;
     border-radius: 4px;
     outline-color: #077EFF;
+    font-size: 15px;
 }
 
-.login-form button{
+.login-form button {
+    width: 100%;
+    box-sizing: border-box;
     padding: 10px;
     background-color: #077EFF;
     color: white;
@@ -40,26 +58,83 @@
     cursor: pointer;
 }
 
-.login-term{
+.login-term {
     display: flex;
-    gap: 5px;
+    align-items: flex-start;
+    gap: 8px;
     font-size: 12px;
     color: #808080;
 }
 
-.login-forgot{
+.login-term input {
+    flex-shrink: 0;
+    margin-top: 3px;
+}
+
+.login-term p {
+    margin: 0;
+    line-height: 1.5;
+}
+
+.login-forgot {
     display: flex;
     flex-direction: column;
     gap: 5px;
 }
 
-.login-toggle{
+.login-toggle {
     font-size: 13px;
     color: #5c5c5c;
+    line-height: 1.5;
 }
 
-.login-toggle span{
+.login-toggle span {
     font-weight: 500;
     color: #077EFF;
     cursor: pointer;
 }
+
+/* Tablet and mobile */
+@media (max-width: 768px) {
+    .login {
+        justify-content: center;
+        gap: 20px;
+        padding: 24px 16px;
+    }
+
+    .login .logo {
+        display: none;
+    }
+
+    .login-form {
+        width: 100%;
+        max-width: 420px;
+        padding: 24px;
+        gap: 18px;
+    }
+}
+
+/* Small mobile screens */
+@media (max-width: 400px) {
+    .login {
+        padding: 16px 12px;
+    }
+
+    .login-form {
+        padding: 22px 18px;
+        gap: 16px;
+    }
+
+    .login-form h2 {
+        font-size: 26px;
+    }
+
+    .form-input {
+        font-size: 14px;
+    }
+
+    .login-form button {
+        font-size: 15px;
+    }
+}
+

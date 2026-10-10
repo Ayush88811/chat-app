@@ -1,59 +1,146 @@
-import React, { useContext } from 'react'
-import './RightSidebar.css';
-import assets from '../../assets/assets';
-import { logout } from '../../config/firebase';
-import { AppContext } from '../../context/AppContext';
+import React, { useContext, useEffect, useState } from 'react'
+import './RightSidebar.css'
+import assets from '../../assets/assets'
+import { logout, db } from '../../config/firebase'
+import { AppContext } from '../../context/AppContext'
+import { doc, onSnapshot } from 'firebase/firestore'
+import { useNavigate } from 'react-router-dom'
 
-const RightSidebar = () => {
+const RightSidebar = ({ isMobileOpen = false, onClose }) => {
 
-  const { userData } = useContext(AppContext);
+    const { selectedUser } = useContext(AppContext)
 
-  return (
-    <div className='rs'>
+    const [profileData, setProfileData] = useState(null)
 
-      <div className='rs-profile'>
+    const navigate = useNavigate()
 
-        <img
-          src={userData?.avatar || assets.profile_img}
-          alt=""
-        />
 
-        <h3>
-          {userData?.name}
-          <img
-            src={assets.green_dot}
-            className='dot'
-            alt=''
-          />
-        </h3>
+    // Listen for the selected user's latest profile
+    useEffect(() => {
 
-        <p>
-          {userData?.bio}
-        </p>
+        if (!selectedUser?.id) {
+            setProfileData(null)
+            return
+        }
 
-      </div>
+        const userRef = doc(
+            db,
+            'users',
+            selectedUser.id
+        )
 
-      <hr />
+        const unsubscribe = onSnapshot(
+            userRef,
+            (snapshot) => {
 
-      <div className='rs-media'>
-        <p>Media</p>
+                if (snapshot.exists()) {
+                    setProfileData(snapshot.data())
+                } else {
+                    setProfileData(null)
+                }
 
-        <div>
-          <img src={assets.pic1} alt="" />
-          <img src={assets.pic2} alt="" />
-          <img src={assets.pic3} alt="" />
-          <img src={assets.pic4} alt="" />
-          <img src={assets.pic1} alt="" />
-          <img src={assets.pic2} alt="" />
+            },
+            (error) => {
+                console.error('Error loading profile:', error)
+            }
+        )
+
+        return () => unsubscribe()
+
+    }, [selectedUser?.id])
+
+
+    // Logout current user
+    const handleLogout = async () => {
+
+        try {
+            await logout()
+            onClose?.()
+            navigate('/')
+        } catch (error) {
+            console.error('Logout error:', error)
+        }
+
+    }
+
+
+    return (
+        <div
+            className={`rs ${isMobileOpen ? 'rs-mobile-open' : ''}`}
+        >
+
+            {/* Close profile on mobile */}
+            <button
+                type="button"
+                className="rs-close"
+                onClick={onClose}
+                aria-label="Close profile"
+            >
+                ×
+            </button>
+
+
+            {/* Selected user's profile */}
+            <div className="rs-profile">
+
+                <img
+                    src={
+                        profileData?.avatar ||
+                        selectedUser?.avatar ||
+                        assets.profile_img
+                    }
+                    alt="Profile"
+                />
+
+                <h3>
+                    {
+                        profileData?.name ||
+                        selectedUser?.name ||
+                        selectedUser?.username ||
+                        'User'
+                    }
+                </h3>
+
+                <p>
+                    {profileData?.bio || 'No bio available'}
+                </p>
+
+            </div>
+
+
+            <hr />
+
+
+            {/* Media section */}
+            <div className="rs-media">
+
+                <p>Media</p>
+
+                <div>
+                    <img src={assets.pic1} alt="Media 1" />
+                    <img src={assets.pic2} alt="Media 2" />
+                    <img src={assets.pic3} alt="Media 3" />
+                    <img src={assets.pic4} alt="Media 4" />
+                    <img src={assets.pic1} alt="Media 5" />
+                    <img src={assets.pic2} alt="Media 6" />
+                </div>
+
+            </div>
+
+
+            {/* Logout */}
+            <button
+                type="button"
+                className="rs-logout"
+                onClick={handleLogout}
+            >
+                Logout
+            </button>
+
         </div>
-      </div>
+    )
 
-      <button onClick={() => logout()}>
-        Logout
-      </button>
-
-    </div>
-  )
 }
 
 export default RightSidebar
+
