@@ -9,7 +9,8 @@ import {
     onSnapshot,
     orderBy,
     query,
-    where
+    where,
+    limit
 } from 'firebase/firestore'
 
 import { AppContext } from '../../context/AppContext'
@@ -100,8 +101,13 @@ const LeftSidebar = ({ onUserSelect }) => {
         const chatsRef = collection(db, 'chats')
         const userChatsQuery = query(
             chatsRef,
-            where('participants', 'array-contains', currentUserId)
+            where('participants', 'array-contains', currentUserId),
+            limit(1)
         )
+
+        console.log('Current UID:', currentUserId);
+        console.log('Project ID:', db.app.options.projectId);
+
 
         const unsubscribeChats = onSnapshot(
             userChatsQuery,
@@ -213,11 +219,14 @@ const LeftSidebar = ({ onUserSelect }) => {
                     return updated
                 })
             },
-                (error) => {
-                console.error("Chat listener error code:", error.code);
-                console.error("Chat listener error message:", error.message);
-                console.log("Logged-in UID:", auth.currentUser?.uid);
+               
+            (error) => {
+                console.error('Chat listener error:', error.code);
+                console.error('Error message:', error.message);
+                console.log('Logged-in UID:', auth.currentUser?.uid);
+                console.log('Firebase project:', db.app.options.projectId);
             }
+
         )
 
         return () => {

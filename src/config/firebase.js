@@ -30,9 +30,7 @@ const signup = async (username, email, password) => {
             bio:"Hey, There i am using chat app",
             lastSeen:Date.now()
         })
-        await setDoc(doc(db,"chats",user.uid),{
-            chatData:[]
-        })
+       
     } catch(error){
         console.error(error)
         toast.error(error.code.split('/')[1].split('-').join(" "));
