@@ -10,6 +10,7 @@ import {
     collection,
     deleteDoc,
     doc,
+    getDoc,
     onSnapshot,
     orderBy,
     query,
@@ -127,65 +128,95 @@ const ChatBox = ({ onInfoClick }) => {
     }
 
     // Create the chat document before adding its first message
-    const ensureChatDocument = async (currentUserId, selectedUserId) => {
-        const chatId = [currentUserId, selectedUserId].sort().join('_')
+    // Create the chat document only when it doesn't already exist
+const ensureChatDocument = async (currentUserId, selectedUserId) => {
+    const chatId = [currentUserId, selectedUserId].sort().join('_')
+
+    const chatRef = doc(db, 'chats', chatId)
+
+    const chatSnapshot = await getDoc(chatRef)
+
+    if (!chatSnapshot.exists()) {
+        await setDoc(chatRef, {
+            participants: [currentUserId, selectedUserId].sort()
+        })
+    } else {
+        const chatData = chatSnapshot.data()
+
+        if (
+            !Array.isArray(chatData.participants) ||
+            !chatData.participants.includes(currentUserId) ||
+            !chatData.participants.includes(selectedUserId)
+        ) {
+            throw new Error(
+                'Chat document exists but participants are missing or incorrect.'
+            )
+        }
+    }
+
+    return chatId
+}
+
+    // Send a text message
+    // Send a text message
+const sendMessage = async () => {
+    if (!message.trim() || !selectedUser?.id || !auth.currentUser) {
+        return
+    }
+
+    const textToSend = message.trim()
+    const currentUserId = auth.currentUser.uid
+    const selectedUserId = selectedUser.id
+
+    try {
+        console.log('Step 1: Before ensuring chat document')
+
+        const chatId = await ensureChatDocument(
+            currentUserId,
+            selectedUserId
+        )
+
+        console.log('Step 1 successful. Chat ID:', chatId)
+
+        const messagesRef = collection(db, 'chats', chatId, 'messages')
+
+        console.log('Step 2: Before saving message')
+
+        await addDoc(messagesRef, {
+            senderId: currentUserId,
+            receiverId: selectedUserId,
+            text: textToSend,
+            read: false,
+            createdAt: serverTimestamp()
+        })
+
+        console.log('Step 2 successful. Message saved')
+
+        setMessage('')
+
+        console.log('Step 3: Before updating last message')
 
         await setDoc(
             doc(db, 'chats', chatId),
             {
-                participants: [currentUserId, selectedUserId].sort()
+                lastMessage: {
+                    text: textToSend,
+                    senderId: currentUserId,
+                    createdAt: serverTimestamp()
+                }
             },
             { merge: true }
         )
 
-        return chatId
+        console.log('Step 3 successful. Last message updated')
+
+    } catch (error) {
+        console.error('Error sending message:', {
+            code: error.code,
+            message: error.message
+        })
     }
-
-    // Send a text message
-    const sendMessage = async () => {
-        if (!message.trim() || !selectedUser?.id || !auth.currentUser) {
-            return
-        }
-
-        const textToSend = message.trim()
-        const currentUserId = auth.currentUser.uid
-        const selectedUserId = selectedUser.id
-
-        try {
-            // Ensure participants exist before writing messages
-            const chatId = await ensureChatDocument(
-                currentUserId,
-                selectedUserId
-            )
-
-            const messagesRef = collection(db, 'chats', chatId, 'messages')
-
-            await addDoc(messagesRef, {
-                senderId: currentUserId,
-                receiverId: selectedUserId,
-                text: textToSend,
-                read: false,
-                createdAt: serverTimestamp()
-            })
-
-            setMessage('')
-
-            // Update the latest message shown in the sidebar
-            await setDoc(
-                doc(db, 'chats', chatId),
-                {
-                    lastMessage: {
-                        text: textToSend,
-                        senderId: currentUserId,
-                        createdAt: serverTimestamp()
-                    }
-                },
-                { merge: true }
-            )
-        } catch (error) {
-            console.error('Error sending message:', error)
-        }
-    }
+}
 
     // Upload an image to Cloudinary and send its URL
     const sendImage = async (file) => {
@@ -227,8 +258,15 @@ const ChatBox = ({ onInfoClick }) => {
                 },
                 { merge: true }
             )
-        } catch (error) {
-            console.error('Error sending image:', error)
+        // } catch (error) {
+        //     console.error('Error sending image:', error)
+        // }
+
+         } catch (error) {
+            console.error('Error sending image:', {
+                code: error.code,
+                message: error.message
+            });
         }
     }
 

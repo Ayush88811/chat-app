@@ -9,8 +9,7 @@ import {
     onSnapshot,
     orderBy,
     query,
-    where,
-    limit
+    where
 } from 'firebase/firestore'
 
 import { AppContext } from '../../context/AppContext'
@@ -102,7 +101,6 @@ const LeftSidebar = ({ onUserSelect }) => {
         const userChatsQuery = query(
             chatsRef,
             where('participants', 'array-contains', currentUserId),
-            limit(1)
         )
 
         console.log('Current UID:', currentUserId);
