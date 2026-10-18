@@ -218,3 +218,101 @@
     }
 
 }
+
+
+/* User action menu */
+.friends {
+    position: relative;
+}
+
+.friend-actions {
+    position: relative;
+    flex-shrink: 0;
+    margin-left: auto;
+}
+
+.friend-menu-button {
+    width: 26px;
+    height: 30px;
+    border: none;
+    border-radius: 5px;
+    background: transparent;
+    color: #c8d4e8;
+    font-size: 23px;
+    line-height: 1;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transition: background 0.2s ease, opacity 0.2s ease;
+}
+
+.friends:hover .friend-menu-button,
+.friends.selected .friend-menu-button,
+.friend-menu-button:focus-visible,
+.friend-menu-button[aria-expanded="true"] {
+    opacity: 1;
+}
+
+.friend-menu-button:hover,
+.friend-menu-button[aria-expanded="true"] {
+    background: rgba(255, 255, 255, 0.15);
+    color: white;
+}
+
+/* Dropdown menu */
+.friend-action-menu {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    z-index: 100;
+    width: 175px;
+    padding: 5px;
+    background: #ffffff;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.25);
+}
+
+.friend-action-menu button {
+    width: 100%;
+    padding: 10px;
+    border: none;
+    border-radius: 5px;
+    background: transparent;
+    color: #d32f2f;
+    text-align: left;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.friend-action-menu button:hover {
+    background: #fff0f0;
+}
+
+/* Loading and empty-state messages */
+.ls-message {
+    padding: 16px 20px;
+    color: #c8c8c8;
+    font-size: 12px;
+    overflow-wrap: anywhere;
+}
+
+/* Keep the menu accessible on touch devices */
+@media (hover: none) {
+    .friend-menu-button {
+        opacity: 1;
+    }
+}
+
+@media (max-width: 600px) {
+    .friend-menu-button {
+        opacity: 1;
+    }
+
+    .friend-action-menu {
+        right: 0;
+        width: 165px;
+    }
+}
