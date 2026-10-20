@@ -7,12 +7,12 @@ import { AppContext } from '../../context/AppContext'
 import {
     collection,
     doc,
+    getDoc,
     onSnapshot
 } from 'firebase/firestore'
 import { useNavigate } from 'react-router-dom'
 
 const RightSidebar = ({ isMobileOpen = false, onClose }) => {
-
     const { selectedUser } = useContext(AppContext)
 
     const [profileData, setProfileData] = useState(null)
@@ -20,94 +20,132 @@ const RightSidebar = ({ isMobileOpen = false, onClose }) => {
     const [previewImage, setPreviewImage] = useState(null)
 
     const navigate = useNavigate()
+    const currentUserId = auth.currentUser?.uid
+    const selectedUserId = selectedUser?.id
 
-    // Listen for the selected user's latest profile
+    // Listen for the selected user's latest profile.
     useEffect(() => {
-
-        if (!selectedUser?.id) {
+        if (!selectedUserId) {
             setProfileData(null)
             return
         }
 
-        const userRef = doc(db, 'users', selectedUser.id)
+        setProfileData(null)
+
+        const userRef = doc(db, 'users', selectedUserId)
 
         const unsubscribe = onSnapshot(
             userRef,
             (snapshot) => {
-                if (snapshot.exists()) {
-                    setProfileData(snapshot.data())
-                } else {
-                    setProfileData(null)
-                }
+                setProfileData(
+                    snapshot.exists() ? snapshot.data() : null
+                )
             },
             (error) => {
-                console.error('Error loading profile:', error)
+                console.error('Error loading profile:', error.code, error.message)
             }
         )
 
         return () => unsubscribe()
+    }, [selectedUserId])
 
-    }, [selectedUser?.id])
-
-
-    // Load images from the currently selected chat
+    // Load shared images only for an accepted contact.
     useEffect(() => {
-
-        const currentUserId = auth.currentUser?.uid
-        const selectedUserId = selectedUser?.id
+        let unsubscribeMessages = null
+        let cancelled = false
 
         setMediaImages([])
         setPreviewImage(null)
 
-        if (!currentUserId || !selectedUserId) {
-            return
+        const loadMedia = async () => {
+            if (!currentUserId || !selectedUserId) return
+
+            if (currentUserId === selectedUserId) return
+
+            const chatId = [currentUserId, selectedUserId]
+                .sort()
+                .join('_')
+
+            try {
+                // Verify that both users are accepted contacts.
+                const contactRef = doc(db, 'contacts', chatId)
+                const contactSnapshot = await getDoc(contactRef)
+
+                if (cancelled) return
+
+                if (!contactSnapshot.exists()) {
+                    setMediaImages([])
+                    return
+                }
+
+                const contactData = contactSnapshot.data()
+
+                if (
+                    !Array.isArray(contactData.users) ||
+                    contactData.users.length !== 2 ||
+                    !contactData.users.includes(currentUserId) ||
+                    !contactData.users.includes(selectedUserId)
+                ) {
+                    setMediaImages([])
+                    console.error('Invalid contact document:', chatId)
+                    return
+                }
+
+                const messagesRef = collection(
+                    db,
+                    'chats',
+                    chatId,
+                    'messages'
+                )
+
+                unsubscribeMessages = onSnapshot(
+                    messagesRef,
+                    (snapshot) => {
+                        const images = snapshot.docs
+                            .map((messageDoc) => ({
+                                id: messageDoc.id,
+                                ...messageDoc.data()
+                            }))
+                            .filter((item) => item.image)
+                            .sort((a, b) => {
+                                const timeA = a.createdAt?.toMillis?.() || 0
+                                const timeB = b.createdAt?.toMillis?.() || 0
+                                return timeB - timeA
+                            })
+
+                        setMediaImages(images)
+                    },
+                    (error) => {
+                        console.error(
+                            'Error loading chat media:',
+                            error.code,
+                            error.message
+                        )
+                        setMediaImages([])
+                    }
+                )
+            } catch (error) {
+                if (!cancelled) {
+                    console.error(
+                        'Could not load chat media:',
+                        error.code,
+                        error.message
+                    )
+                    setMediaImages([])
+                }
+            }
         }
 
-        // Use the same chat ID format as ChatBox
-        const chatId = [currentUserId, selectedUserId]
-            .sort()
-            .join('_')
+        loadMedia()
 
-        const messagesRef = collection(
-            db,
-            'chats',
-            chatId,
-            'messages'
-        )
+        return () => {
+            cancelled = true
+            if (unsubscribeMessages) unsubscribeMessages()
+        }
+    }, [currentUserId, selectedUserId])
 
-        const unsubscribe = onSnapshot(
-            messagesRef,
-            (snapshot) => {
-
-                // Keep only messages that contain an image
-                const images = snapshot.docs
-                    .map((messageDoc) => ({
-                        id: messageDoc.id,
-                        ...messageDoc.data()
-                    }))
-                    .filter((message) => message.image)
-                    .sort((a, b) => {
-                        const timeA = a.createdAt?.toMillis?.() || 0
-                        const timeB = b.createdAt?.toMillis?.() || 0
-                        return timeB - timeA
-                    })
-
-                setMediaImages(images)
-            },
-            (error) => {
-                console.error('Error loading chat media:', error)
-                setMediaImages([])
-            }
-        )
-
-        return () => unsubscribe()
-
-    }, [selectedUser?.id])
-
-
-    // Close image preview using the Escape key
+    // Close image preview using Escape.
     useEffect(() => {
-
         if (!previewImage) return
 
         const handleKeyDown = (event) => {
@@ -121,13 +159,10 @@ const RightSidebar = ({ isMobileOpen = false, onClose }) => {
         return () => {
             window.removeEventListener('keydown', handleKeyDown)
         }
-
     }, [previewImage])
 
-
-    // Logout current user
+    // Log out the current user.
     const handleLogout = async () => {
-
         try {
             await logout()
             onClose?.()
@@ -135,16 +170,11 @@ const RightSidebar = ({ isMobileOpen = false, onClose }) => {
         } catch (error) {
             console.error('Logout error:', error)
         }
-
     }
 
-
     return (
-        <div
-            className={`rs ${isMobileOpen ? 'rs-mobile-open' : ''}`}
-        >
-
-            {/* Close profile on mobile */}
+        <div className={`rs ${isMobileOpen ? 'rs-mobile-open' : ''}`}>
+            {/* Close profile on mobile. */}
             <button
                 type="button"
                 className="rs-close"
@@ -154,10 +184,8 @@ const RightSidebar = ({ isMobileOpen = false, onClose }) => {
                 ×
             </button>
 
-
-            {/* Selected user's profile */}
+            {/* Selected user's profile. */}
             <div className="rs-profile">
-
                 <img
                     src={
                         profileData?.avatar ||
@@ -168,75 +196,53 @@ const RightSidebar = ({ isMobileOpen = false, onClose }) => {
                 />
 
                 <h3>
-                    {
-                        profileData?.name ||
+                    {profileData?.name ||
                         selectedUser?.name ||
                         selectedUser?.username ||
-                        'User'
-                    }
+                        'User'}
                 </h3>
 
-                <p>
-                    {profileData?.bio || 'No bio available'}
-                </p>
-
+                <p>{profileData?.bio || 'No bio available'}</p>
             </div>
-
 
             <hr />
 
-
-            {/* Images shared in this chat */}
+            {/* Images shared in this chat. */}
             <div className="rs-media">
-
                 <p>Media</p>
 
                 <div className="rs-media-grid">
-
                     {mediaImages.length > 0 ? (
-
-                        mediaImages.map((message) => (
-
+                        mediaImages.map((item) => (
                             <button
                                 type="button"
                                 className="rs-media-item"
-                                key={message.id}
-                                onClick={() => {
-                                    setPreviewImage(message.image)
-                                }}
+                                key={item.id}
+                                onClick={() => setPreviewImage(item.image)}
                                 aria-label="Preview shared image"
                             >
                                 <img
-                                    src={message.image}
+                                    src={item.image}
                                     alt="Shared in chat"
                                     loading="lazy"
                                 />
                             </button>
-
                         ))
-
                     ) : (
-
                         <p className="rs-no-media">
                             No shared images yet
                         </p>
-
                     )}
-
                 </div>
-
             </div>
 
-
-            {/* Full-size image preview */}
+            {/* Full-size image preview. */}
             {previewImage && (
-
                 <div
                     className="rs-image-preview"
                     onClick={() => setPreviewImage(null)}
                     role="presentation"
                 >
-
                     <button
                         type="button"
                         className="rs-preview-close"
@@ -251,13 +257,10 @@ const RightSidebar = ({ isMobileOpen = false, onClose }) => {
                         alt="Full-size shared image"
                         onClick={(event) => event.stopPropagation()}
                     />
-
                 </div>
-
             )}
 
-
-            {/* Logout */}
+            {/* Logout. */}
             <button
                 type="button"
                 className="rs-logout"
@@ -265,10 +268,8 @@ const RightSidebar = ({ isMobileOpen = false, onClose }) => {
             >
                 Logout
             </button>
-
         </div>
     )
-
 }
 
 export default RightSidebar

@@ -4,7 +4,6 @@ import './ChatBox.css'
 import assets from '../../assets/assets'
 import { AppContext } from '../../context/AppContext'
 import { auth, db } from '../../config/firebase'
-
 import {
     addDoc,
     collection,
@@ -18,11 +17,12 @@ import {
     setDoc,
     updateDoc
 } from 'firebase/firestore'
-
 import uploadImage from '../../lib/upload'
 
 const ChatBox = ({ onInfoClick }) => {
     const { selectedUser, setSelectedUser, userData } = useContext(AppContext)
+
+    const currentUserId = auth.currentUser?.uid
 
     const [messages, setMessages] = useState([])
     const [message, setMessage] = useState('')
@@ -33,7 +33,7 @@ const ChatBox = ({ onInfoClick }) => {
 
     const messagesEndRef = useRef(null)
 
-    // Keep the selected user's profile updated
+    // Keep the selected user's profile updated.
     useEffect(() => {
         if (!selectedUser?.id) {
             setSelectedUserData(null)
@@ -57,58 +57,174 @@ const ChatBox = ({ onInfoClick }) => {
         return () => unsubscribe()
     }, [selectedUser?.id])
 
-    // Listen for messages in the selected chat
-    useEffect(() => {
-        const currentUserId = auth.currentUser?.uid
-        const selectedUserId = selectedUser?.id
-
-        if (!currentUserId || !selectedUserId) {
-            setMessages([])
-            return
+    // Verify contact membership and avoid overwriting existing participants.
+    const ensureChatDocument = async (senderId, receiverId) => {
+        if (!senderId || !receiverId || senderId === receiverId) {
+            throw new Error('Invalid chat participants.')
         }
 
-        const chatId = [currentUserId, selectedUserId].sort().join('_')
-        const messagesRef = collection(db, 'chats', chatId, 'messages')
-        const messagesQuery = query(messagesRef, orderBy('createdAt', 'asc'))
+        const sortedPair = [senderId, receiverId].sort()
+        const chatId = sortedPair.join('_')
 
-        const unsubscribe = onSnapshot(
-            messagesQuery,
-            (snapshot) => {
-                const messagesList = snapshot.docs.map((messageDoc) => ({
-                    id: messageDoc.id,
-                    ...messageDoc.data()
-                }))
+        const contactRef = doc(db, 'contacts', chatId)
+        const contactSnapshot = await getDoc(contactRef)
 
-                setMessages(messagesList)
+        if (!contactSnapshot.exists()) {
+            throw new Error(
+                'You can chat only after the friend request is accepted.'
+            )
+        }
 
-                // Mark received messages as read
-                messagesList.forEach(async (msg) => {
-                    if (
-                        msg.receiverId === currentUserId &&
-                        msg.read === false
-                    ) {
-                        try {
-                            await updateDoc(
-                                doc(db, 'chats', chatId, 'messages', msg.id),
-                                { read: true }
-                            )
-                        } catch (error) {
-                            console.error('Error marking message as read:', error)
-                        }
-                    }
-                })
-            },
-            (error) => {
-                console.error('Error loading messages:', error)
+        const contactData = contactSnapshot.data()
+
+        if (
+            !Array.isArray(contactData.users) ||
+            contactData.users.length !== 2 ||
+            !contactData.users.includes(senderId) ||
+            !contactData.users.includes(receiverId)
+        ) {
+            throw new Error('The accepted contact details are invalid.')
+        }
+
+        const chatRef = doc(db, 'chats', chatId)
+        const chatSnapshot = await getDoc(chatRef)
+
+        if (chatSnapshot.exists()) {
+            const chatData = chatSnapshot.data()
+
+            // Check both participants without changing their stored order.
+            if (
+                !Array.isArray(chatData.participants) ||
+                chatData.participants.length !== 2 ||
+                !chatData.participants.includes(senderId) ||
+                !chatData.participants.includes(receiverId)
+            ) {
+                throw new Error('The chat participants are invalid.')
             }
-        )
 
-        return () => unsubscribe()
-    }, [selectedUser?.id])
+            // Important: do not write participants to an existing chat.
+            // Your Firestore Rules allow existing chats to update lastMessage only.
+            return chatId
+        }
 
-    // Scroll to the newest message
+        // Create a chat document only if it does not already exist.
+        // Firestore Rules must allow checking a missing chat document.
+        await setDoc(chatRef, {
+            participants: sortedPair
+        })
+
+        return chatId
+    }
+
+    // Load messages after verifying the accepted contact and chat.
     useEffect(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+        let unsubscribeMessages = null
+        let cancelled = false
+
+        const loadMessages = async () => {
+            if (!currentUserId || !selectedUser?.id) {
+                setMessages([])
+                return
+            }
+
+            const selectedUserId = selectedUser.id
+
+            if (currentUserId === selectedUserId) {
+                setMessages([])
+                return
+            }
+
+            setMessages([])
+
+            try {
+                const chatId = await ensureChatDocument(
+                    currentUserId,
+                    selectedUserId
+                )
+
+                if (cancelled) return
+
+                const messagesRef = collection(
+                    db,
+                    'chats',
+                    chatId,
+                    'messages'
+                )
+
+                const messagesQuery = query(
+                    messagesRef,
+                    orderBy('createdAt', 'asc')
+                )
+
+                unsubscribeMessages = onSnapshot(
+                    messagesQuery,
+                    (snapshot) => {
+                        const messagesList = snapshot.docs.map(
+                            (messageDoc) => ({
+                                id: messageDoc.id,
+                                ...messageDoc.data()
+                            })
+                        )
+
+                        setMessages(messagesList)
+
+                        // Mark received messages as read.
+                        messagesList.forEach((msg) => {
+                            if (
+                                msg.receiverId === currentUserId &&
+                                msg.read === false
+                            ) {
+                                updateDoc(
+                                    doc(
+                                        db,
+                                        'chats',
+                                        chatId,
+                                        'messages',
+                                        msg.id
+                                    ),
+                                    { read: true }
+                                ).catch((error) => {
+                                    console.error(
+                                        'Error marking message as read:',
+                                        error
+                                    )
+                                })
+                            }
+                        })
+                    },
+                    (error) => {
+                        console.error(
+                            'Error loading messages:',
+                            error.code,
+                            error.message
+                        )
+                    }
+                )
+            } catch (error) {
+                if (!cancelled) {
+                    setMessages([])
+                    console.error(
+                        'Could not open chat:',
+                        error.code || '',
+                        error.message
+                    )
+                }
+            }
+        }
+
+        loadMessages()
+
+        return () => {
+            cancelled = true
+            if (unsubscribeMessages) unsubscribeMessages()
+        }
+    }, [currentUserId, selectedUser?.id])
+
+    // Scroll to the latest message.
+    useEffect(() => {
+        messagesEndRef.current?.scrollIntoView({
+            behavior: 'smooth'
+        })
     }, [messages])
 
     const isUserOnline = () => {
@@ -121,152 +237,91 @@ const ChatBox = ({ onInfoClick }) => {
         if (!selectedUserData?.lastSeen) return 'Offline'
         if (isUserOnline()) return 'Online'
 
-        return `Last seen ${new Date(selectedUserData.lastSeen).toLocaleTimeString([], {
+        return `Last seen ${new Date(
+            selectedUserData.lastSeen
+        ).toLocaleTimeString([], {
             hour: '2-digit',
             minute: '2-digit'
         })}`
     }
 
-    // Create the chat document before adding its first message
-    // Create the chat document only when it doesn't already exist
-const ensureChatDocument = async (currentUserId, selectedUserId) => {
-    const chatId = [currentUserId, selectedUserId].sort().join('_')
-
-    const chatRef = doc(db, 'chats', chatId)
-
-    const chatSnapshot = await getDoc(chatRef)
-
-    if (!chatSnapshot.exists()) {
-        await setDoc(chatRef, {
-            participants: [currentUserId, selectedUserId].sort()
-        })
-    } else {
-        const chatData = chatSnapshot.data()
-
-        if (
-            !Array.isArray(chatData.participants) ||
-            !chatData.participants.includes(currentUserId) ||
-            !chatData.participants.includes(selectedUserId)
-        ) {
-            throw new Error(
-                'Chat document exists but participants are missing or incorrect.'
-            )
-        }
-    }
-
-    return chatId
-}
-
-    // Send a text message
-    // Send a text message
-const sendMessage = async () => {
-    if (!message.trim() || !selectedUser?.id || !auth.currentUser) {
-        return
-    }
-
-    const textToSend = message.trim()
-    const currentUserId = auth.currentUser.uid
-    const selectedUserId = selectedUser.id
-
-    try {
-        console.log('Step 1: Before ensuring chat document')
-
-        const chatId = await ensureChatDocument(
-            currentUserId,
-            selectedUserId
-        )
-
-        console.log('Step 1 successful. Chat ID:', chatId)
-
-        const messagesRef = collection(db, 'chats', chatId, 'messages')
-
-        console.log('Step 2: Before saving message')
-
-        await addDoc(messagesRef, {
-            senderId: currentUserId,
-            receiverId: selectedUserId,
-            text: textToSend,
-            read: false,
-            createdAt: serverTimestamp()
-        })
-
-        console.log('Step 2 successful. Message saved')
-
-        setMessage('')
-
-        console.log('Step 3: Before updating last message')
-
-        await setDoc(
-            doc(db, 'chats', chatId),
-            {
-                lastMessage: {
-                    text: textToSend,
-                    senderId: currentUserId,
-                    createdAt: serverTimestamp()
-                }
-            },
-            { merge: true }
-        )
-
-        console.log('Step 3 successful. Last message updated')
-
-    } catch (error) {
-        console.error('Error sending message:', {
-            code: error.code,
-            message: error.message
-        })
-    }
-}
-
-    // Upload an image to Cloudinary and send its URL
-    const sendImage = async (file) => {
-        if (!file || !selectedUser?.id || !auth.currentUser) {
+    // Send a text message.
+    const sendMessage = async () => {
+        if (!message.trim() || !selectedUser?.id || !auth.currentUser) {
             return
         }
 
+        const textToSend = message.trim()
+        const senderId = auth.currentUser.uid
+        const receiverId = selectedUser.id
+
         try {
-            const currentUserId = auth.currentUser.uid
-            const selectedUserId = selectedUser.id
+            const chatId = await ensureChatDocument(senderId, receiverId)
 
-            const imageUrl = await uploadImage(file)
-
-            // Create or update the chat before adding the image message
-            const chatId = await ensureChatDocument(
-                currentUserId,
-                selectedUserId
+            await addDoc(
+                collection(db, 'chats', chatId, 'messages'),
+                {
+                    senderId,
+                    receiverId,
+                    text: textToSend,
+                    read: false,
+                    createdAt: serverTimestamp()
+                }
             )
 
-            const messagesRef = collection(db, 'chats', chatId, 'messages')
-
-            await addDoc(messagesRef, {
-                senderId: currentUserId,
-                receiverId: selectedUserId,
-                text: '',
-                image: imageUrl,
-                read: false,
-                createdAt: serverTimestamp()
+            // Update the preview after the message has been saved.
+            await updateDoc(doc(db, 'chats', chatId), {
+                lastMessage: {
+                    text: textToSend,
+                    senderId,
+                    createdAt: serverTimestamp()
+                }
             })
 
-            await setDoc(
-                doc(db, 'chats', chatId),
-                {
-                    lastMessage: {
-                        text: '📷 Image',
-                        senderId: currentUserId,
-                        createdAt: serverTimestamp()
-                    }
-                },
-                { merge: true }
-            )
-        // } catch (error) {
-        //     console.error('Error sending image:', error)
-        // }
+            setMessage('')
+        } catch (error) {
+            console.error('Error sending message:', {
+                code: error.code,
+                message: error.message
+            })
+        }
+    }
 
-         } catch (error) {
+    // Upload an image to Cloudinary and send its URL.
+    const sendImage = async (file) => {
+        if (!file || !selectedUser?.id || !auth.currentUser) return
+
+        try {
+            const senderId = auth.currentUser.uid
+            const receiverId = selectedUser.id
+
+            const imageUrl = await uploadImage(file)
+            const chatId = await ensureChatDocument(senderId, receiverId)
+
+            await addDoc(
+                collection(db, 'chats', chatId, 'messages'),
+                {
+                    senderId,
+                    receiverId,
+                    text: '',
+                    image: imageUrl,
+                    read: false,
+                    createdAt: serverTimestamp()
+                }
+            )
+
+            await updateDoc(doc(db, 'chats', chatId), {
+                lastMessage: {
+                    text: '📷 Image',
+                    senderId,
+                    createdAt: serverTimestamp()
+                }
+            })
+        } catch (error) {
             console.error('Error sending image:', {
                 code: error.code,
                 message: error.message
-            });
+            })
         }
     }
 
@@ -275,7 +330,7 @@ const sendMessage = async () => {
 
         if (file) sendImage(file)
 
-        // Let the same image be selected again later
+        // Allow selecting the same image again.
         event.target.value = ''
     }
 
@@ -290,9 +345,14 @@ const sendMessage = async () => {
         setEditText('')
     }
 
-    // Save edited text
+    // Edit a message sent by the current user.
     const saveEdit = async () => {
-        if (!editText.trim() || !editingMessageId || !selectedUser?.id || !auth.currentUser) {
+        if (
+            !editText.trim() ||
+            !editingMessageId ||
+            !selectedUser?.id ||
+            !auth.currentUser
+        ) {
             return
         }
 
@@ -312,28 +372,26 @@ const sendMessage = async () => {
                 }
             )
 
-            // Update the sidebar preview if this was the latest message
             if (latestMessage?.id === editingMessageId) {
-                await setDoc(
-                    doc(db, 'chats', chatId),
-                    {
-                        lastMessage: {
-                            text: editText.trim(),
-                            senderId: auth.currentUser.uid,
-                            createdAt: latestMessage.createdAt
-                        }
-                    },
-                    { merge: true }
-                )
+                await updateDoc(doc(db, 'chats', chatId), {
+                    lastMessage: {
+                        text: editText.trim(),
+                        senderId: auth.currentUser.uid,
+                        createdAt: latestMessage.createdAt
+                    }
+                })
             }
 
             cancelEdit()
         } catch (error) {
-            console.error('Error editing message:', error)
+            console.error('Error editing message:', {
+                code: error.code,
+                message: error.message
+            })
         }
     }
 
-    // Delete a message sent by the current user
+    // Delete a message sent by the current user.
     const deleteMessage = async (messageId) => {
         if (!selectedUser?.id || !auth.currentUser) return
 
@@ -349,7 +407,10 @@ const sendMessage = async () => {
 
             setMenuMessageId(null)
         } catch (error) {
-            console.error('Error deleting message:', error)
+            console.error('Error deleting message:', {
+                code: error.code,
+                message: error.message
+            })
         }
     }
 
@@ -407,7 +468,7 @@ const sendMessage = async () => {
                     {selectedUser && (
                         <div className="user-status">
                             {isUserOnline() && (
-                                <span className="online-dot"></span>
+                                <span className="online-dot" />
                             )}
                             <span>{formatLastSeen()}</span>
                         </div>
@@ -432,12 +493,15 @@ const sendMessage = async () => {
             {/* Messages */}
             <div className="chat-msg">
                 {!selectedUser ? (
-                    <p className="no-message">Select a user to start chatting</p>
+                    <p className="no-message">
+                        Select a user to start chatting
+                    </p>
                 ) : messages.length === 0 ? (
                     <p className="no-message">No messages yet</p>
                 ) : (
                     messages.map((msg) => {
-                        const isSender = msg.senderId === auth.currentUser?.uid
+                        const isSender =
+                            msg.senderId === auth.currentUser?.uid
 
                         return (
                             <div
@@ -449,13 +513,26 @@ const sendMessage = async () => {
                                         <input
                                             type="text"
                                             value={editText}
-                                            onChange={(event) => setEditText(event.target.value)}
+                                            onChange={(event) =>
+                                                setEditText(event.target.value)
+                                            }
                                             onKeyDown={handleKeyDown}
                                             autoFocus
                                         />
+
                                         <div className="edit-buttons">
-                                            <button type="button" onClick={saveEdit}>Save</button>
-                                            <button type="button" onClick={cancelEdit}>Cancel</button>
+                                            <button
+                                                type="button"
+                                                onClick={saveEdit}
+                                            >
+                                                Save
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={cancelEdit}
+                                            >
+                                                Cancel
+                                            </button>
                                         </div>
                                     </div>
                                 ) : (
@@ -470,7 +547,9 @@ const sendMessage = async () => {
                                             <p className="msg">
                                                 {msg.text}
                                                 {msg.edited && (
-                                                    <span className="edited-text"> edited</span>
+                                                    <span className="edited-text">
+                                                        {' '}edited
+                                                    </span>
                                                 )}
                                             </p>
                                         )}
@@ -480,9 +559,13 @@ const sendMessage = async () => {
                                                 <button
                                                     type="button"
                                                     className="more-btn"
-                                                    onClick={() => setMenuMessageId(
-                                                        menuMessageId === msg.id ? null : msg.id
-                                                    )}
+                                                    onClick={() =>
+                                                        setMenuMessageId(
+                                                            menuMessageId === msg.id
+                                                                ? null
+                                                                : msg.id
+                                                        )
+                                                    }
                                                     aria-label="Message options"
                                                 >
                                                     ⋮
@@ -491,13 +574,21 @@ const sendMessage = async () => {
                                                 {menuMessageId === msg.id && (
                                                     <div className="message-menu">
                                                         {!msg.image && (
-                                                            <button type="button" onClick={() => startEdit(msg)}>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() =>
+                                                                    startEdit(msg)
+                                                                }
+                                                            >
                                                                 Edit
                                                             </button>
                                                         )}
+
                                                         <button
                                                             type="button"
-                                                            onClick={() => deleteMessage(msg.id)}
+                                                            onClick={() =>
+                                                                deleteMessage(msg.id)
+                                                            }
                                                         >
                                                             Delete
                                                         </button>
@@ -508,12 +599,12 @@ const sendMessage = async () => {
                                     </>
                                 )}
 
-                                {/* Avatar, time and read receipt */}
                                 <div className="msg-info">
                                     <img
                                         src={
                                             isSender
-                                                ? userData?.avatar || assets.profile_img
+                                                ? userData?.avatar ||
+                                                  assets.profile_img
                                                 : selectedUserData?.avatar ||
                                                   selectedUser?.avatar ||
                                                   assets.profile_img
@@ -524,7 +615,13 @@ const sendMessage = async () => {
                                     <p>{formatTime(msg.createdAt)}</p>
 
                                     {isSender && (
-                                        <span className={msg.read ? 'read-status read' : 'read-status'}>
+                                        <span
+                                            className={
+                                                msg.read
+                                                    ? 'read-status read'
+                                                    : 'read-status'
+                                            }
+                                        >
                                             {msg.read ? '✓✓' : '✓'}
                                         </span>
                                     )}
@@ -534,7 +631,7 @@ const sendMessage = async () => {
                     })
                 )}
 
-                <div ref={messagesEndRef}></div>
+                <div ref={messagesEndRef} />
             </div>
 
             {/* Message input */}
@@ -556,7 +653,10 @@ const sendMessage = async () => {
                 />
 
                 <label htmlFor="image">
-                    <img src={assets.gallery_icon} alt="Choose image" />
+                    <img
+                        src={assets.gallery_icon}
+                        alt="Choose image"
+                    />
                 </label>
 
                 <img
