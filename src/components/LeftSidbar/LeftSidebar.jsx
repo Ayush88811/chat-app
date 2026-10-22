@@ -175,6 +175,19 @@ const LeftSidebar = ({ onUserSelect }) => {
         )
     }, [users, search])
 
+    // Show contacts with the most recent messages first.
+const sortedContacts = useMemo(() => {
+    return [...contacts].sort((a, b) => {
+        const timeA =
+            lastMessages[a.id]?.createdAt?.toMillis?.() || 0
+
+        const timeB =
+            lastMessages[b.id]?.createdAt?.toMillis?.() || 0
+
+        return timeB - timeA
+    })
+}, [contacts, lastMessages])
+
     const contactIds = useMemo(
         () => new Set(contacts.map(user => user.id)),
         [contacts]
@@ -439,7 +452,7 @@ const LeftSidebar = ({ onUserSelect }) => {
                 ) : activeTab === 'chats' ? (
                     contacts.length === 0 ? (
                         <p className="ls-message">No contacts yet. Find a user and send a request.</p>
-                    ) : contacts.map(renderContact)
+                   ) : sortedContacts.map(renderContact)
                 ) : activeTab === 'requests' ? (
                     requests.length === 0 ? (
                         <p className="ls-message">No pending friend requests.</p>
