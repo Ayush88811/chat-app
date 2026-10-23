@@ -4,6 +4,7 @@
 
 .chat {
     min-height: 100vh;
+    box-sizing: border-box;
 
     background: linear-gradient(
         #596aff,
@@ -12,6 +13,9 @@
 
     display: grid;
     place-items: center;
+
+    /* Prevent the container from touching the viewport edges */
+    padding: 18px 0;
 }
 
 
@@ -25,6 +29,10 @@
 
     max-width: 1200px;
 
+    /* Keep the entire chat inside the available viewport */
+    min-height: 0;
+    margin: auto;
+
     background: aliceblue;
 
     display: grid;
@@ -35,7 +43,6 @@
         1fr;
 
     border-radius: 10px;
-
     overflow: hidden;
 }
 

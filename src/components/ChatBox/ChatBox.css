@@ -486,3 +486,25 @@
         right: 0;
     }
 }
+
+
+/* Keep desktop chat panels inside the container */
+@media (min-width: 769px) {
+    .chat-container {
+        align-items: stretch;
+    }
+
+    .desktop-sidebar,
+    .desktop-chat,
+    .desktop-right {
+        min-width: 0;
+        min-height: 0;
+        height: 100%;
+        overflow: hidden;
+    }
+
+    .desktop-chat .chat-box {
+        height: 100%;
+        min-height: 0;
+    }
+}
