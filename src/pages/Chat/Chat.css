@@ -171,3 +171,182 @@
     overflow: hidden;
 }
 
+
+/* Welcome screen */
+.welcome-screen {
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 32px;
+    box-sizing: border-box;
+    overflow-y: auto;
+    background:
+        radial-gradient(
+            circle at 50% 38%,
+            rgba(59, 130, 246, 0.09),
+            transparent 45%
+        ),
+        #f8fafc;
+}
+
+.welcome-content {
+    width: 100%;
+    max-width: 460px;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+/* Chat icon */
+.welcome-icon {
+    width: 76px;
+    height: 76px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 24px;
+    background: linear-gradient(135deg, #3b82f6, #0755d9);
+    box-shadow: 0 12px 28px rgba(37, 99, 235, 0.24);
+    transform: rotate(-5deg);
+    margin-bottom: 28px;
+}
+
+.welcome-icon span {
+    color: white;
+    font-size: 30px;
+    font-weight: 700;
+    letter-spacing: 3px;
+    transform: rotate(5deg);
+    margin-top: -9px;
+}
+
+/* Small tagline */
+.welcome-tagline {
+    margin: 0 0 14px;
+    color: #2563eb;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 3px;
+}
+
+/* Main heading */
+.welcome-content h2 {
+    max-width: 430px;
+    margin: 0;
+    color: #172b4d;
+    font-size: clamp(27px, 3vw, 40px);
+    line-height: 1.2;
+    font-weight: 750;
+    letter-spacing: -1.2px;
+}
+
+.welcome-content h2 span {
+    display: block;
+    color: #3478f6;
+}
+
+/* Description */
+.welcome-description {
+    max-width: 350px;
+    margin: 18px 0 0;
+    color: #64748b;
+    font-size: 14px;
+    line-height: 1.8;
+}
+
+/* Bottom hint */
+.welcome-hint {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    margin-top: 30px;
+    padding: 11px 16px;
+    border: 1px solid #e2e8f0;
+    border-radius: 30px;
+    background: rgba(255, 255, 255, 0.8);
+    color: #475569;
+    font-size: 12px;
+}
+
+.welcome-hint-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #22c55e;
+    box-shadow: 0 0 0 4px rgba(34, 197, 94, 0.12);
+    flex-shrink: 0;
+}
+
+/* Small screens */
+@media (max-width: 600px) {
+    .welcome-screen {
+        padding: 24px 18px;
+    }
+
+    .welcome-icon {
+        width: 64px;
+        height: 64px;
+        border-radius: 20px;
+        margin-bottom: 24px;
+    }
+
+    .welcome-content h2 {
+        font-size: 29px;
+    }
+
+    .welcome-description {
+        font-size: 13px;
+    }
+}
+
+
+
+/* Smooth entrance for the welcome content */
+.welcome-content {
+    animation: welcomeFadeIn 0.7s ease-out both;
+}
+
+/* Gentle floating effect for the chat icon */
+.welcome-icon {
+    animation:
+        welcomeFadeIn 0.7s ease-out both,
+        welcomeFloat 3.5s ease-in-out 0.7s infinite;
+    will-change: transform;
+}
+
+/* Fade in with a slight upward movement */
+@keyframes welcomeFadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(14px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Subtle floating motion */
+@keyframes welcomeFloat {
+    0%, 100% {
+        transform: translateY(0) rotate(-5deg);
+    }
+
+    50% {
+        transform: translateY(-8px) rotate(-3deg);
+    }
+}
+
+/* Respect users who prefer reduced motion */
+@media (prefers-reduced-motion: reduce) {
+    .welcome-content,
+    .welcome-icon {
+        animation: none;
+        will-change: auto;
+    }
+}
